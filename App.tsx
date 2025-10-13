@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { UserSettings, Reflection, DailyTask, AppView, AITwin, ChatMessage, NightReflectionData, MorningReflectionData } from './types';
 import * as geminiService from './services/geminiService';
@@ -541,11 +542,6 @@ const DashboardView: React.FC<{
         return todayReflection?.dailyTasks && todayReflection.dailyTasks.length > 0 && todayReflection.dailyTasks.every(t => t.completed);
     }, [todayReflection?.dailyTasks]);
 
-
-    if (!settings) {
-        return <div>Loading settings...</div>;
-    }
-    
     const totalScore = useMemo(() => 
         reflections.reduce((sum, r) => sum + (r.score ?? 0), 0),
         [reflections]
@@ -556,7 +552,7 @@ const DashboardView: React.FC<{
             return { currentRefund: 0, refundPercentage: 0 };
         }
         
-        const totalCommitmentDays = settings.commitmentWeeks * 7;
+        const totalCommitmentDays = (settings.commitmentWeeks || 0) * 7;
         let refund = 0;
         const depositAmount = settings.depositAmount;
 
@@ -579,6 +575,10 @@ const DashboardView: React.FC<{
         return { currentRefund: finalRefund, refundPercentage: percentage };
 
     }, [settings, streak]);
+
+    if (!settings) {
+        return <div>Loading settings...</div>;
+    }
 
     const currentMonth = new Date().getMonth();
     const startMonth = settings.yearStartMonth;
@@ -1280,7 +1280,9 @@ const AIToolsView: React.FC<{
                         {aiTwins.map(twin => (
                             <button key={twin.date} onClick={() => handleSelectTwin(twin)} className={`w-full text-left p-2 rounded-lg ${selectedTwin?.date === twin.date ? 'bg-sky-500 text-white' : 'bg-slate-100 hover:bg-slate-200'}`}>
                                 {new Date(twin.date).toLocaleDateString()}
-                                <span className={`block text-xs ${selectedTwin?.date === twin.date ? 'text-sky-100' : 'text-slate-500'}`}>Score: {twin.reflection.score}</span>
+                                <span className={`block text-xs ${selectedTwin?.date === twin.date ? 'text-sky-100' : 'text-slate-500'}`}>
+                                    Score: {twin.reflection.score ?? '-'}
+                                </span>
                             </button>
                         ))}
                         </div>
@@ -1288,41 +1290,44 @@ const AIToolsView: React.FC<{
                     <div className="w-full md:w-2/3 flex flex-col">
                         {selectedTwin ? (
                             <>
-                                <div className="flex-grow overflow-y-auto mb-4 pr-2 space-y-4">
-                                     {chatHistory.map((msg, i) => (
-                                         <div key={i} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                                             {msg.role === 'model' && <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500" />}
-                                             <div className={`max-w-xs md:max-w-md p-3 rounded-lg whitespace-pre-wrap ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-slate-800 border border-slate-200'}`}>
-                                                 {msg.text}
-                                             </div>
-                                             {msg.role === 'user' && <UserIcon className="w-8 h-8 flex-shrink-0" />}
-                                         </div>
-                                     ))}
-                                     {isTwinLoading && (
+                                <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-t-lg">
+                                    {chatHistory.map((msg, i) => (
+                                        <div key={i} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                                            {msg.role === 'model' && <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500 mt-1" />}
+                                            <div className={`max-w-md p-3 rounded-lg shadow-sm ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-slate-800'}`}>
+                                                {msg.text}
+                                            </div>
+                                            {msg.role === 'user' && <UserIcon className="w-8 h-8 flex-shrink-0 text-slate-600 mt-1" />}
+                                        </div>
+                                    ))}
+                                    {isTwinLoading && (
                                          <div className="flex items-start gap-3">
-                                             <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500" />
-                                             <div className="max-w-xs md:max-w-md p-3 rounded-lg bg-slate-200">
-                                                 <Spinner />
-                                             </div>
-                                         </div>
-                                     )}
+                                            <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500 mt-1" />
+                                            <div className="max-w-xs p-3 rounded-lg bg-white flex items-center">
+                                                <Spinner />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex-shrink-0 flex items-start gap-2">
-                                    <TextArea 
-                                        value={userInput} 
-                                        onChange={e => setUserInput(e.target.value)} 
-                                        placeholder="メッセージを入力..." 
-                                        rows={2}
-                                        disabled={isTwinLoading}
-                                    />
-                                    <PrimaryButton onClick={handleSendMessage} disabled={isTwinLoading || !userInput.trim()}>
-                                        <SendIcon className="w-5 h-5" />
-                                    </PrimaryButton>
+                                <div className="flex-shrink-0 p-2 border-t border-slate-200 bg-white rounded-b-lg">
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={userInput}
+                                            onChange={e => setUserInput(e.target.value)}
+                                            placeholder={`過去の自分 (${new Date(selectedTwin.date).toLocaleDateString()}) にメッセージを送る`}
+                                            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                                            disabled={isTwinLoading}
+                                        />
+                                        <PrimaryButton onClick={handleSendMessage} disabled={isTwinLoading || !userInput.trim()}>
+                                            <SendIcon className="w-5 h-5"/>
+                                        </PrimaryButton>
+                                    </div>
                                 </div>
                             </>
                         ) : (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                <p>左のリストから対話したい過去の自分を選んでください。</p>
+                            <div className="flex flex-col items-center justify-center h-full bg-slate-50 rounded-lg">
+                                <GhostIcon className="w-16 h-16 text-slate-300 mb-4" />
+                                <p className="text-slate-500">左のリストから対話したい過去の自分を選んでください。</p>
                             </div>
                         )}
                     </div>
