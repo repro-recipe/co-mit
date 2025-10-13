@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { UserSettings, Reflection, DailyTask, AppView, AITwin, ChatMessage, NightReflectionData, MorningReflectionData } from './types';
 import * as geminiService from './services/geminiService';
-import { BrainCircuitIcon, CalendarIcon, FlameIcon, GoalIcon, GhostIcon, BotIcon, UserIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon } from './components/Icons';
+import { BrainCircuitIcon, CalendarIcon, FlameIcon, GoalIcon, GhostIcon, BotIcon, UserIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon } from './components/Icons';
 import Road from './components/Road';
 import Calendar from './components/Calendar';
 
@@ -254,7 +254,10 @@ const App: React.FC = () => {
            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.1),_transparent_40%)] -z-10"></div>
             <main className="max-w-7xl mx-auto">
                  <header className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tighter">KAIZEN <span className="text-sky-600">REVOLUTION</span></h1>
+                    <div className="flex items-center gap-3">
+                        <CoMitLogoIcon className="w-8 h-12 text-[#4A6C6F]" />
+                        <span className="text-3xl font-bold text-[#344445] tracking-tighter">co-mit</span>
+                    </div>
                      <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2 text-amber-500">
                            <FlameIcon className="w-6 h-6" />
@@ -592,6 +595,7 @@ const DashboardView: React.FC<{
                     onDayClick={onCalendarDayClick} 
                     currentDate={calendarDate}
                     setCurrentDate={setCalendarDate}
+                    settings={settings}
                 />
             </div>
 
@@ -1288,7 +1292,7 @@ const AIToolsView: React.FC<{
                                      {chatHistory.map((msg, i) => (
                                          <div key={i} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                                              {msg.role === 'model' && <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500" />}
-                                             <div className={`max-w-xs md:max-w-md p-3 rounded-lg whitespace-pre-wrap ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-slate-200 text-slate-800'}`}>
+                                             <div className={`max-w-xs md:max-w-md p-3 rounded-lg whitespace-pre-wrap ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-slate-800 border border-slate-200'}`}>
                                                  {msg.text}
                                              </div>
                                              {msg.role === 'user' && <UserIcon className="w-8 h-8 flex-shrink-0" />}

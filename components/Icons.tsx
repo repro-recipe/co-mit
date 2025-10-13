@@ -47,3 +47,10 @@ export const ChevronRightIcon = ({ className }: { className?: string }) => (
 export const PiggyBankIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 17c0 .5-.5 1-1 1H7c-.5 0-1-.5-1-1v-1h4v1ZM8 7a4 4 0 0 1 8 0h2a6 6 0 0 0-5.2-5.9C12.4 1 12 1.4 12 2v1.3c0 .3.2.6.5.8C12.8 4.2 13 4.6 13 5s-.2.8-.5.9c-.3.2-.5.5-.5.8V7Z"/><path d="M7.3 7.8c.2-.2.5-.3.8-.3s.6.1.8.3c.4.4.4 1 0 1.4-.2.2-.5.3-.8.3s-.6-.1-.8-.3a1 1 0 0 1 0-1.4Z"/><path d="M19.5 8.5c-2.3 0-4.5.4-6.5.9V14c0 1.1-.9 2-2 2h-1c-1.1 0-2-.9-2-2v-1a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2.5c.8 0 1.5.7 1.5 1.5v.5c0 .8.7 1.5 1.5 1.5h1c.8 0 1.5-.7 1.5-1.5v-1a2 2 0 0 1 2-2h4a2 2 0 0 0 2-2v-2c0-1.1-.9-2-2-2Z"/></svg>
 );
+
+export const CoMitLogoIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" fill="currentColor" className={className} aria-hidden="true">
+    <circle cx="50" cy="30" r="20"/>
+    <path d="M50 60 L80 100 L50 140 L20 100 Z"/>
+  </svg>
+);

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Reflection } from '../types';
+import type { Reflection, UserSettings } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
 
 interface CalendarProps {
@@ -7,9 +7,10 @@ interface CalendarProps {
   onDayClick: (reflection: Reflection) => void;
   currentDate: Date;
   setCurrentDate: (date: Date) => void;
+  settings: UserSettings | null;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDate, setCurrentDate }) => {
+const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDate, setCurrentDate, settings }) => {
   const reflectionsMap = React.useMemo(() => {
     const map = new Map<string, Reflection>();
     for (const r of reflections) {
@@ -25,6 +26,20 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
 
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  const commitmentStartDateStr = settings?.commitmentStartDate;
+  const commitmentWeeks = settings?.commitmentWeeks;
+
+  const { commitmentStart, commitmentEnd } = React.useMemo(() => {
+      if (!commitmentStartDateStr || !commitmentWeeks) {
+          return { commitmentStart: null, commitmentEnd: null };
+      }
+      const startDate = new Date(commitmentStartDateStr + 'T00:00:00');
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + commitmentWeeks * 7);
+      return { commitmentStart: startDate, commitmentEnd: endDate };
+  }, [commitmentStartDateStr, commitmentWeeks]);
+
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -57,22 +72,33 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
         {blanks.map((_, i) => <div key={`blank-${i}`}></div>)}
         {days.map(day => {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const dayDate = new Date(dateStr + 'T00:00:00');
           const reflection = reflectionsMap.get(dateStr);
-          const isToday = new Date().toISOString().split('T')[0] === dateStr;
+          
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const isToday = dayDate.getTime() === today.getTime();
+          
+          const isCommitted = commitmentStart && commitmentEnd && dayDate >= commitmentStart && dayDate < commitmentEnd;
 
           return (
             <button
               key={day}
               onClick={() => reflection && onDayClick(reflection)}
               disabled={!reflection}
-              className={`relative w-full aspect-square flex items-center justify-center rounded-full transition-colors text-sm
-                ${reflection ? 'cursor-pointer hover:bg-sky-200' : 'text-slate-400'}
-                ${isToday ? 'font-bold ring-2 ring-sky-500' : ''}
+              className={`relative w-full aspect-square flex items-center justify-center rounded-md transition-colors text-sm font-medium disabled:cursor-default
+                ${isToday
+                    ? 'bg-rose-500 text-white'
+                    : isCommitted
+                    ? 'bg-sky-100 text-sky-800'
+                    : reflection ? 'bg-white text-slate-700' : 'text-slate-400'
+                }
+                ${reflection && !isToday ? 'cursor-pointer hover:bg-sky-200' : ''}
               `}
             >
               {day}
               {reflection && (
-                <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-sky-500 rounded-full"></span>
+                <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 ${isToday ? 'bg-white' : 'bg-sky-500'} rounded-full`}></span>
               )}
             </button>
           );
