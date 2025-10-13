@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { UserSettings, Reflection, DailyTask, AppView, AITwin, ChatMessage, NightReflectionData, MorningReflectionData } from './types';
 import * as geminiService from './services/geminiService';
@@ -96,25 +95,34 @@ const App: React.FC = () => {
     // Load data from localStorage on initial render
     useEffect(() => {
         try {
-            const settings = localStorage.getItem('userSettings');
+            const settingsJSON = localStorage.getItem('userSettings');
             const storedReflections = localStorage.getItem('reflections');
             const storedStreak = localStorage.getItem('streak');
             
-            if (settings) {
-                setUserSettings(JSON.parse(settings));
-                setView('DASHBOARD');
+            if (settingsJSON) {
+                const parsedSettings = JSON.parse(settingsJSON);
+                if (parsedSettings && typeof parsedSettings === 'object') {
+                    setUserSettings(parsedSettings);
+                    setView('DASHBOARD');
+                } else {
+                    setView('SETUP');
+                }
             } else {
                 setView('SETUP');
             }
+
             if (storedReflections) {
                 setReflections(JSON.parse(storedReflections));
             }
             if (storedStreak) {
-                setStreak(parseInt(storedStreak, 10));
+                setStreak(parseInt(storedStreak, 10) || 0);
             }
         } catch (error) {
             console.error("Failed to load data from localStorage", error);
             setView('SETUP');
+            setUserSettings(null);
+            setReflections([]);
+            setStreak(0);
         } finally {
             setIsLoading(false);
         }
