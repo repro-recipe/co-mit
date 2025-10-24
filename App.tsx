@@ -65,7 +65,7 @@ const Modal: React.FC<{ isOpen: boolean, onClose: () => void, title: string, chi
             <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-2xl m-4" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center p-4 border-b border-slate-200">
                     <h2 className="text-xl font-bold text-sky-600">{title}</h2>
-                    <button onClick={onClose} className="text-slate-500 hover:text-slate-800">&times;</button>
+                    <button onClick={onClose} className="text-slate-500 hover:text-slate-800 text-2xl font-bold">&times;</button>
                 </div>
                 <div className="p-6 max-h-[80vh] overflow-y-auto">
                     {children}
@@ -89,7 +89,7 @@ const App: React.FC = () => {
     const [streak, setStreak] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [setupData, setSetupData] = useState<Partial<UserSettings> | null>(null);
-    const [selectedReflectionForTwin, setSelectedReflectionForTwin] = useState<Reflection | null>(null);
+    const [reflectionDetail, setReflectionDetail] = useState<Reflection | null>(null);
 
 
     // Load data from localStorage on initial render
@@ -206,14 +206,8 @@ const App: React.FC = () => {
         setReflections(newReflections);
     };
     
-    const handleCloseAITools = () => {
-        setSelectedReflectionForTwin(null);
-        setView('DASHBOARD');
-    }
-
     const handleCalendarDayClick = (reflection: Reflection) => {
-        setSelectedReflectionForTwin(reflection);
-        setView('AI_TWIN');
+        setReflectionDetail(reflection);
     };
 
     const renderContent = () => {
@@ -240,10 +234,8 @@ const App: React.FC = () => {
                     tasks={todayReflection?.dailyTasks || []}
                     settings={userSettings!}
                 />;
-            case 'AI_TWIN':
-                 return <AIToolsView type="twin" onClose={handleCloseAITools} reflections={reflections} initialReflection={selectedReflectionForTwin} />;
             case 'SPICY_FEEDBACK':
-                 return <AIToolsView type="feedback" onClose={handleCloseAITools} reflections={reflections} />;
+                 return <FeedbackView onClose={() => setView('DASHBOARD')} reflections={reflections} />;
             case 'DASHBOARD':
             default:
                 return <DashboardView
@@ -276,6 +268,7 @@ const App: React.FC = () => {
                 </header>
                 {renderContent()}
             </main>
+            <ReflectionDetailModal reflection={reflectionDetail} onClose={() => setReflectionDetail(null)} />
         </div>
     );
 };
@@ -291,9 +284,65 @@ const ProgressBar: React.FC<{ current: number; total: number }> = ({ current, to
     </div>
 );
 
+const ReflectionDetailModal: React.FC<{ reflection: Reflection | null, onClose: () => void }> = ({ reflection, onClose }) => {
+    if (!reflection) return null;
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`${new Date(reflection.date).toLocaleDateString('ja-JP')}の振り返り`}>
+            <div className="space-y-6">
+                <Card>
+                    <h3 className="font-bold text-lg text-sky-600 mb-2">総合スコア</h3>
+                    <p className="text-4xl font-bold text-center">{reflection.score ?? 'N/A'}</p>
+                </Card>
+                
+                {reflection.morning && (
+                    <Card>
+                        <h3 className="font-bold text-lg text-sky-600 mb-2">朝の計画</h3>
+                        <p className="whitespace-pre-wrap">{reflection.morning.dailyPlan}</p>
+                    </Card>
+                )}
+
+                {reflection.dailyTasks && (
+                    <Card>
+                        <h3 className="font-bold text-lg text-sky-600 mb-2">実行タスク</h3>
+                        <ul className="space-y-2">
+                            {reflection.dailyTasks.map((task, i) => (
+                                <li key={i} className={`flex items-center gap-2 ${task.completed ? '' : 'text-slate-500'}`}>
+                                    {task.completed ? '✅' : '❌'}
+                                    <span className={task.completed ? 'line-through' : ''}>{task.text}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
+                )}
+                
+                {reflection.night && (
+                    <Card>
+                        <h3 className="font-bold text-lg text-sky-600 mb-2">夜の振り返り</h3>
+                        <div className="space-y-4 text-sm">
+                            <div><strong>感情:</strong> <p className="p-2 bg-slate-50 rounded mt-1">{reflection.night.feelings || '記載なし'}</p></div>
+                            <div><strong>達成分析:</strong> <p className="p-2 bg-slate-50 rounded mt-1">{reflection.night.achievementAnalysis || '記載なし'}</p></div>
+                            <div><strong>無駄にした時間:</strong> <p className="p-2 bg-slate-50 rounded mt-1">{reflection.night.wastedTime || '記載なし'}</p></div>
+                            <div><strong>+αの行動:</strong> <p className="p-2 bg-slate-50 rounded mt-1">{reflection.night.extras || '記載なし'}</p></div>
+                            <div><strong>明日のアイデア:</strong> <p className="p-2 bg-slate-50 rounded mt-1">{reflection.night.tomorrowIdeas || '記載なし'}</p></div>
+                        </div>
+                    </Card>
+                )}
+
+                 {reflection.analysis && (
+                    <Card>
+                        <h3 className="font-bold text-lg text-sky-600 mb-2">総括</h3>
+                        <p className="p-2 bg-slate-50 rounded">{reflection.analysis}</p>
+                    </Card>
+                )}
+
+            </div>
+        </Modal>
+    );
+};
+
 const SetupView: React.FC<{ onProceedToDeposit: (settings: Partial<UserSettings>) => void }> = ({ onProceedToDeposit }) => {
     const [step, setStep] = useState(1);
-    const [isLoadingAI, setIsLoadingAI] = useState(false);
     const [commitmentField, setCommitmentField] = useState('');
     const [customCommitmentField, setCustomCommitmentField] = useState('');
     const [goalSuggestions, setGoalSuggestions] = useState<string[]>([]);
@@ -308,14 +357,11 @@ const SetupView: React.FC<{ onProceedToDeposit: (settings: Partial<UserSettings>
     const commitmentOptions = ["受験", "研究", "英検"];
 
     const fetchGoalSuggestions = async (field: string) => {
-        setIsLoadingAI(true);
-        setGoalSuggestions([]);
         const suggestions = await geminiService.generateGoalSuggestions(field);
         setGoalSuggestions(suggestions);
         if (suggestions.length > 0 && settings.longTermGoal === '') {
             setSettings(s => ({ ...s, longTermGoal: suggestions[0] }));
         }
-        setIsLoadingAI(false);
     };
 
     const handleCommitmentSelect = (field: string) => {
@@ -381,23 +427,20 @@ const SetupView: React.FC<{ onProceedToDeposit: (settings: Partial<UserSettings>
                 {step === 2 && (
                      <div className="space-y-6 animate-fade-in">
                         <h3 className="font-bold text-lg text-center">STEP 2/{totalSteps}: 年間の究極目標</h3>
-                         {isLoadingAI && <div className="flex justify-center p-8"><Spinner/></div>}
-                         {!isLoadingAI && (
-                             <>
-                                 <p className="text-center text-sm text-slate-500">AIが君の分野「{commitmentField}」に合わせて目標を提案します。</p>
-                                 <div className="space-y-2">
-                                     {goalSuggestions.map((goal, i) => (
-                                         <button key={i} onClick={() => setSettings({...settings, longTermGoal: goal})} className="w-full text-left p-3 rounded-lg bg-slate-100 hover:bg-slate-200 border-2 border-slate-200">
-                                             {goal}
-                                         </button>
-                                     ))}
-                                 </div>
-                                 <TextArea value={settings.longTermGoal || ''} onChange={e => setSettings({...settings, longTermGoal: e.target.value})} placeholder="または、自分で究極目標を書き出す" rows={3}/>
-                             </>
-                         )}
+                         <>
+                             <p className="text-center text-sm text-slate-500">君の分野「{commitmentField}」に合わせた目標の例です。</p>
+                             <div className="space-y-2">
+                                 {goalSuggestions.map((goal, i) => (
+                                     <button key={i} onClick={() => setSettings({...settings, longTermGoal: goal})} className="w-full text-left p-3 rounded-lg bg-slate-100 hover:bg-slate-200 border-2 border-slate-200">
+                                         {goal}
+                                     </button>
+                                 ))}
+                             </div>
+                             <TextArea value={settings.longTermGoal || ''} onChange={e => setSettings({...settings, longTermGoal: e.target.value})} placeholder="または、自分で究極目標を書き出す" rows={3}/>
+                         </>
                          <div className="flex justify-between items-center">
                              <SecondaryButton onClick={() => setStep(1)}>&larr; 戻る</SecondaryButton>
-                             <PrimaryButton onClick={() => setStep(3)} disabled={isLoadingAI || !settings.longTermGoal?.trim()}>次へ &rarr;</PrimaryButton>
+                             <PrimaryButton onClick={() => setStep(3)} disabled={!settings.longTermGoal?.trim()}>次へ &rarr;</PrimaryButton>
                          </div>
                      </div>
                 )}
@@ -689,9 +732,6 @@ const DashboardView: React.FC<{
                         {todayReflection?.night && (
                             <p className="text-center text-green-700 p-4 bg-green-100 rounded-lg">本日の振り返りは完了しました。お疲れ様でした！</p>
                         )}
-                         <SecondaryButton onClick={() => onNavigate('AI_TWIN')} className="w-full flex items-center justify-center gap-2">
-                             <GhostIcon /> 過去の自分と対話する
-                         </SecondaryButton>
                          <SecondaryButton onClick={() => onNavigate('SPICY_FEEDBACK')} className="w-full flex items-center justify-center gap-2">
                             <BrainCircuitIcon /> 匿名の辛口フィードバック
                          </SecondaryButton>
@@ -1209,36 +1249,14 @@ const NightReflectionView: React.FC<{
 };
 
 
-const AIToolsView: React.FC<{
-    type: 'twin' | 'feedback',
+const FeedbackView: React.FC<{
     onClose: () => void,
     reflections: Reflection[],
-    initialReflection?: Reflection | null
-}> = ({ type, onClose, reflections, initialReflection }) => {
+}> = ({ onClose, reflections }) => {
     // Feedback State
     const [feedback, setFeedback] = useState('');
     const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
 
-    // AI Twin State
-    const [selectedTwin, setSelectedTwin] = useState<AITwin | null>(null);
-    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-    const [userInput, setUserInput] = useState('');
-    const [isTwinLoading, setIsTwinLoading] = useState(false);
-
-    useEffect(() => {
-        if (initialReflection) {
-            setSelectedTwin({ date: initialReflection.date, reflection: initialReflection });
-            setChatHistory([]);
-        }
-    }, [initialReflection]);
-
-    const aiTwins = useMemo(() => {
-        return reflections
-            .filter(r => r.morning && r.night) // Only show completed days
-            .map(r => ({ date: r.date, reflection: r }))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [reflections]);
-    
     const handleGetFeedback = useCallback(async () => {
         setIsFeedbackLoading(true);
         const scoreTrend = reflections.map(r => r.score ?? 50).slice(-7);
@@ -1247,100 +1265,19 @@ const AIToolsView: React.FC<{
         setIsFeedbackLoading(false);
     }, [reflections]);
 
-    const handleSelectTwin = (twin: AITwin) => {
-        setSelectedTwin(twin);
-        setChatHistory([]);
-    };
-
-    const handleSendMessage = async () => {
-        if (userInput.trim() === '' || !selectedTwin) return;
-        
-        const newHistory: ChatMessage[] = [...chatHistory, { role: 'user', text: userInput }];
-        setChatHistory(newHistory);
-        setUserInput('');
-        setIsTwinLoading(true);
-
-        const aiResponse = await geminiService.generateAITwinResponse(selectedTwin.reflection, newHistory);
-        setChatHistory([...newHistory, { role: 'model', text: aiResponse }]);
-        setIsTwinLoading(false);
-    };
-
     return (
-        <Modal isOpen={true} onClose={onClose} title={type === 'twin' ? 'AI Twinとの対話' : '辛口フィードバック'}>
-            {type === 'feedback' && (
-                <div className="text-center space-y-4">
-                    <h3 className="text-lg">他人の進捗（スコア推移）を見て、自分を省みる。</h3>
-                    <p className="text-slate-500">これは匿名の誰かのスコア推移だ。もし君がフィードバックを送るなら、どう伝える？</p>
-                    <div className="p-4 bg-slate-100 rounded-lg">
-                        <p className="font-mono text-xl tracking-widest text-slate-700">{reflections.map(r => r.score ?? '-').slice(-7).join(' -> ')}</p>
-                    </div>
-                    {isFeedbackLoading ? <Spinner /> : 
-                        feedback ? <Card className="text-left"><p className="text-amber-600 font-semibold">{feedback}</p></Card> : null
-                    }
-                    <PrimaryButton onClick={handleGetFeedback} disabled={isFeedbackLoading}>AIに辛口フィードバックを生成させる</PrimaryButton>
+        <Modal isOpen={true} onClose={onClose} title={'辛口フィードバック'}>
+            <div className="text-center space-y-4">
+                <h3 className="text-lg">他人の進捗（スコア推移）を見て、自分を省みる。</h3>
+                <p className="text-slate-500">これは匿名の誰かのスコア推移だ。もし君がフィードバックを送るなら、どう伝える？</p>
+                <div className="p-4 bg-slate-100 rounded-lg">
+                    <p className="font-mono text-xl tracking-widest text-slate-700">{reflections.map(r => r.score ?? '-').slice(-7).join(' -> ')}</p>
                 </div>
-            )}
-            {type === 'twin' && (
-                <div className="flex flex-col md:flex-row gap-4 h-[60vh]">
-                    <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 pb-4 md:pb-0 md:pr-4 overflow-y-auto">
-                        <h3 className="font-bold mb-2">対話したい自分を選ぶ</h3>
-                        <div className="space-y-2">
-                        {aiTwins.map(twin => (
-                            <button key={twin.date} onClick={() => handleSelectTwin(twin)} className={`w-full text-left p-2 rounded-lg ${selectedTwin?.date === twin.date ? 'bg-sky-500 text-white' : 'bg-slate-100 hover:bg-slate-200'}`}>
-                                {new Date(twin.date).toLocaleDateString()}
-                                <span className={`block text-xs ${selectedTwin?.date === twin.date ? 'text-sky-100' : 'text-slate-500'}`}>
-                                    Score: {twin.reflection.score ?? '-'}
-                                </span>
-                            </button>
-                        ))}
-                        </div>
-                    </div>
-                    <div className="w-full md:w-2/3 flex flex-col">
-                        {selectedTwin ? (
-                            <>
-                                <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-t-lg">
-                                    {chatHistory.map((msg, i) => (
-                                        <div key={i} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
-                                            {msg.role === 'model' && <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500 mt-1" />}
-                                            <div className={`max-w-md p-3 rounded-lg shadow-sm ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-slate-800'}`}>
-                                                {msg.text}
-                                            </div>
-                                            {msg.role === 'user' && <UserIcon className="w-8 h-8 flex-shrink-0 text-slate-600 mt-1" />}
-                                        </div>
-                                    ))}
-                                    {isTwinLoading && (
-                                         <div className="flex items-start gap-3">
-                                            <BotIcon className="w-8 h-8 flex-shrink-0 text-sky-500 mt-1" />
-                                            <div className="max-w-xs p-3 rounded-lg bg-white flex items-center">
-                                                <Spinner />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-shrink-0 p-2 border-t border-slate-200 bg-white rounded-b-lg">
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            value={userInput}
-                                            onChange={e => setUserInput(e.target.value)}
-                                            placeholder={`過去の自分 (${new Date(selectedTwin.date).toLocaleDateString()}) にメッセージを送る`}
-                                            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                                            disabled={isTwinLoading}
-                                        />
-                                        <PrimaryButton onClick={handleSendMessage} disabled={isTwinLoading || !userInput.trim()}>
-                                            <SendIcon className="w-5 h-5"/>
-                                        </PrimaryButton>
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full bg-slate-50 rounded-lg">
-                                <GhostIcon className="w-16 h-16 text-slate-300 mb-4" />
-                                <p className="text-slate-500">左のリストから対話したい過去の自分を選んでください。</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+                {isFeedbackLoading ? <Spinner /> : 
+                    feedback ? <Card className="text-left"><p className="text-amber-600 font-semibold">{feedback}</p></Card> : null
+                }
+                <PrimaryButton onClick={handleGetFeedback} disabled={isFeedbackLoading}>辛口フィードバックをもらう</PrimaryButton>
+            </div>
         </Modal>
     );
 };

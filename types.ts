@@ -39,7 +39,7 @@ export interface RoadSegment {
   score: number;
 }
 
-export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK';
+export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'SPICY_FEEDBACK';
 
 export interface AITwin {
   date: string;

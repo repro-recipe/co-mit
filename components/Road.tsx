@@ -1,7 +1,9 @@
 import React from 'react';
 
 // A single tile component for styling
-const Tile = ({ className, children }: { className: string, children?: React.ReactNode }) => (
+// FIX: Explicitly typed the Tile component with React.FC. This allows TypeScript to recognize it as a React component
+// that can accept the special 'key' prop, resolving errors when it's used inside an array map.
+const Tile: React.FC<{ className: string, children?: React.ReactNode }> = ({ className, children }) => (
     <div className={`w-10 h-16 rounded-md shadow-inner flex-shrink-0 flex items-center justify-center font-bold text-white ${className}`}>
         {children}
     </div>
