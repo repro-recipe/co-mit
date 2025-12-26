@@ -28,17 +28,17 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
   const commitmentStartDateStr = settings?.commitmentStartDate;
-  const commitmentWeeks = settings?.commitmentWeeks;
+  const goalDurationDays = settings?.goalDurationDays;
 
   const { commitmentStart, commitmentEnd } = React.useMemo(() => {
-      if (!commitmentStartDateStr || !commitmentWeeks) {
+      if (!commitmentStartDateStr || !goalDurationDays) {
           return { commitmentStart: null, commitmentEnd: null };
       }
       const startDate = new Date(commitmentStartDateStr + 'T00:00:00');
       const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + commitmentWeeks * 7);
+      endDate.setDate(startDate.getDate() + goalDurationDays);
       return { commitmentStart: startDate, commitmentEnd: endDate };
-  }, [commitmentStartDateStr, commitmentWeeks]);
+  }, [commitmentStartDateStr, goalDurationDays]);
 
 
   const handlePrevMonth = () => {

@@ -1,80 +1,456 @@
-import type { NightReflectionData, DailyTask } from '../types';
 
-// Hardcoded responses to replace AI generation
-const goalSuggestions = [
-    "1年間で分野の基礎を完全にマスターする",
-    "関連する資格を2つ以上取得する",
-    "分野のトップエキスパートとコンタクトを取る",
-];
+import { GoogleGenAI, Type } from "@google/genai";
+import type { NightReflectionData, ChatMessage, Reflection, DailyTask, SideProject } from '../types';
 
-const responses = {
-    appropriateTask: "いいですね。成功した方のペースと比べてもちょうどよいスピード感です。その調子でやっていくといいでしょう",
-    insufficientTask: "本当にそれだけでいいんですか？実際他の方のペースと比較すると遅いです。それでは達成できない可能性もあり、何よりコミットしきれないでしょう。もう少し高い目標を考え直してみてください",
-    takeResponsibility: "そうですね。それがわかっているなら、後はやるだけです。",
-    makeExcuse: "なるほど...で、本当にあなたには成すすべがなかったんですかね？よく考えなおしてみてください。あそこで行動できていたなど在りませんでしたか？",
-    spicyFeedback: "結果は行動の後にしかついてこない。今のままで満足するな。",
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Helper to strip HTML tags
+const stripHtml = (html: string | undefined): string => {
+    if (!html) return "";
+    return html.replace(/<[^>]*>?/gm, '');
+};
+
+// Helper to clean JSON string (robust extraction)
+const cleanJson = (text: string): string => {
+    if (!text) return "{}";
+    
+    // 0. Try parsing directly first (most efficient for responseMimeType usage)
+    try {
+        JSON.parse(text);
+        return text;
+    } catch (e) {
+        // Continue to cleaning
+    }
+
+    let cleaned = text;
+
+    // 1. Remove markdown code blocks explicitly
+    cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '');
+
+    // 2. Find the outer-most braces to capture the JSON object
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        return cleaned.substring(firstBrace, lastBrace + 1).trim();
+    }
+    
+    // 3. Fallback: Try to find an array if object parsing failed
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+        return cleaned.substring(firstBracket, lastBracket + 1).trim();
+    }
+
+    return cleaned.trim();
 };
 
 export const generateGoalSuggestions = async (commitmentField: string): Promise<string[]> => {
-    console.log(`Generating suggestions for: ${commitmentField}`);
-    // Return a fixed list of goals, ignoring the input field.
-    return Promise.resolve(goalSuggestions);
+    const prompt = `
+        The user has committed to the field: "${commitmentField}".
+        Generate 3 highly specific, ambitious, and exciting annual goals for this field.
+        Avoid generic goals like "Study hard". Instead, suggest concrete achievements like "Develop and launch a web service with 1000 users" or "Pass the N1 exam with a perfect score".
+        
+        Return ONLY a JSON object with a "goals" key, which is an array of 3 strings.
+        Language: Japanese.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        goals: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING },
+                        },
+                    },
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        // Handle case where AI might return just the array or the object
+        return Array.isArray(result) ? result : (result.goals || []);
+    } catch (error) {
+        console.error("Error generating goal suggestions:", error);
+        return [
+            `${commitmentField}の分野でプロフェッショナルとして認定される`,
+            `${commitmentField}に関連する主要なコンテストや試験で上位に入る`,
+            `${commitmentField}を活用して副収入を得られるレベルになる`,
+        ]; // Context-aware fallback
+    }
+};
+
+export const generateQuarterlyGoals = async (longTermGoal: string, commitmentField: string): Promise<string[]> => {
+    const prompt = `
+        User's Field: "${commitmentField}"
+        User's Annual Goal: "${longTermGoal}"
+
+        Create a strategic 4-step quarterly plan (3 months each) to achieve this annual goal.
+        The steps should be logical milestones.
+        1st Quarter: Foundation / Start
+        2nd Quarter: Development / Practice
+        3rd Quarter: Application / Expansion
+        4th Quarter: Finalization / Achievement
+
+        Return ONLY a JSON object with a "goals" key, which is an array of 4 strings.
+        Language: Japanese.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        goals: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING },
+                        },
+                    },
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        return Array.isArray(result) ? result : (result.goals || []);
+    } catch (error) {
+        console.error("Error generating quarterly goals:", error);
+        return ["基礎固めと学習", "実践的なスキルの習得", "応用と成果の創出", "目標の最終達成"];
+    }
 };
 
 export const compareGoalRecall = async (userInput: string, correctGoal: string): Promise<boolean> => {
-    // A simple heuristic: if the user input is longer than 5 chars, we'll say it's a good faith effort.
-    // In a real non-AI app, this would be a more robust string similarity check.
-    return Promise.resolve(userInput.trim().length > 5);
+    const prompt = `
+        A user was asked to recall their goal.
+        User's input: "${userInput}"
+        The correct goal is: "${correctGoal}"
+
+        Are these two goals semantically similar?
+        The user's input doesn't need to be a perfect match, but it should capture the essence.
+
+        Respond with ONLY a JSON object with a single key "match" which is a boolean (true or false).
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        match: { type: Type.BOOLEAN },
+                    },
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        return result.match ?? false;
+    } catch (error) {
+        console.error("Error comparing goal recall:", error);
+        // Fallback: simple includes check if AI fails
+        return userInput.toLowerCase().includes(correctGoal.toLowerCase().substring(0, 5));
+    }
 };
 
-export const evaluateTask = async (task: string, longTermGoal: string, quarterlyGoal: string): Promise<{ judgment: 'appropriate' | 'insufficient', response: string }> => {
-    // Judge task based on length.
-    if (task.trim().length < 10) {
-        return Promise.resolve({ judgment: 'insufficient', response: responses.insufficientTask });
+export const evaluateTask = async (task: string, longTermGoal: string, quarterlyGoal: string, isFirstTask: boolean = true): Promise<{ judgment: 'appropriate' | 'insufficient', response: string }> => {
+    let strictnessInstruction = "";
+    if (isFirstTask) {
+        strictnessInstruction = `
+        This is the user's PRIMARY task for the day. Be STRICT.
+        If the task is too easy, vague, or irrelevant (e.g., "think about it", "check email"), judgment = "insufficient".
+        "insufficient" response should be critical, asking them to aim higher.
+        `;
+    } else {
+        strictnessInstruction = `
+        This is an ADDITIONAL task for the day. Be LENIENT and SUPPORTIVE.
+        Unless the task is completely irrelevant or nonsense, judge it as "appropriate".
+        "appropriate" response should be validating.
+        `;
     }
-    return Promise.resolve({ judgment: 'appropriate', response: responses.appropriateTask });
+
+    const prompt = `
+        Long-term Goal: "${longTermGoal}"
+        Current 3-Month Goal: "${quarterlyGoal}"
+        Proposed Daily Task: "${task}"
+
+        Evaluate this task.
+        ${strictnessInstruction}
+        
+        - If the task moves the needle or shows commitment, judgment = "appropriate".
+        
+        Response tone: Japanese.
+
+        Return ONLY a JSON object with keys: "judgment" (string) and "response" (string).
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        judgment: { type: Type.STRING },
+                        response: { type: Type.STRING },
+                    },
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        // Fix: Normalize case to handle "Appropriate" or "Insufficient"
+        const judgment = result.judgment?.toLowerCase();
+        if (judgment === 'appropriate' || judgment === 'insufficient') {
+            return { ...result, judgment };
+        }
+        return { judgment: 'appropriate', response: "素晴らしいタスクですね！" };
+    } catch (error) {
+        console.error("Error evaluating task:", error);
+        return { judgment: 'appropriate', response: "素晴らしいタスクですね！頑張ってください！" }; // Fallback
+    }
+};
+
+export const breakDownTaskIntoSteps = async (task: string, longTermGoal: string, quarterlyGoal: string): Promise<string[]> => {
+    const prompt = `
+        Task: "${task}"
+        Context: Aiming for "${quarterlyGoal}"
+
+        Break this task down into 3-5 actionable, concrete small steps (ToDo list).
+        Return ONLY a JSON object with a "steps" key, which is an array of strings.
+        Language: Japanese.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        steps: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING },
+                        },
+                    },
+                    required: ["steps"],
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        return Array.isArray(result) ? result : (result.steps || []);
+    } catch (error) {
+        console.error("Error breaking down task:", error);
+        return [
+            "準備をする",
+            "作業を実行する",
+            "確認と修正を行う",
+        ]; // Fallback steps
+    }
 };
 
 export const summarizeNightReflection = async (data: NightReflectionData): Promise<string> => {
-    // Return a generic summary.
-    return Promise.resolve("昨日の活動を振り返りました。");
+    const noteContent = stripHtml(data.freeMemo) || data.feelings;
+    const prompt = `
+      Based on the user's reflection from yesterday, create a very short one-sentence summary in Japanese.
+      Content: "${noteContent}"
+      Achievements: "${data.achievementAnalysis}"
+    `;
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+      return response.text;
+    } catch (error) {
+      console.error("Error summarizing reflection:", error);
+      return "昨日の振り返りを思い出して、今日に活かしましょう。";
+    }
 };
 
 export const analyzeSentiment = async (text: string): Promise<'positive' | 'negative'> => {
-    // Simple keyword check for negative sentiment.
-    const negativeKeywords = ['ダメ', '最悪', 'できなかった', 'つらい', '悲しい', '残念'];
-    if (negativeKeywords.some(kw => text.includes(kw))) {
-        return Promise.resolve('negative');
+    const prompt = `
+        Analyze the sentiment of the following Japanese text.
+        Text: "${text}"
+        Return ONLY a JSON object: {"sentiment": "positive" | "negative"}.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: { sentiment: { type: Type.STRING } },
+                },
+            },
+        });
+        const result = JSON.parse(cleanJson(response.text));
+        return result.sentiment === 'negative' ? 'negative' : 'positive';
+    } catch (error) {
+        console.error("Error analyzing sentiment:", error);
+        return 'positive'; // Default to positive
     }
-    return Promise.resolve('positive');
 };
 
-export const analyzeFailureReason = async (reason: string): Promise<{ analysis: 'responsibility' | 'excuse', response: string }> => {
-    // Simple keyword check for excuses.
-    const excuseKeywords = ['時間', 'せい', '体調', '余裕', '忙しい'];
-     if (excuseKeywords.some(kw => reason.includes(kw))) {
-        return Promise.resolve({ analysis: 'excuse', response: responses.makeExcuse });
+export const analyzeFailureReason = async (reason: string, sideProjects?: SideProject[]): Promise<{ analysis: 'responsibility' | 'excuse', response: string, sideProjectQuestion?: string }> => {
+    const hasSideProjects = sideProjects && sideProjects.length > 0;
+    const sideProjectInfo = hasSideProjects ? `Side Projects: ${sideProjects.map(p => p.name).join(', ')}.` : '';
+
+    const prompt = `
+        User failed a task. Reason: "${reason}".
+        ${sideProjectInfo}
+        
+        1. Analyze: Is this "responsibility" (taking ownership/lack of action) or "excuse" (blaming externals)?
+        2. Response: Japanese text.
+           - responsibility: "Accept it and move on." type message.
+           - excuse: "Are you sure there was nothing you could do?" type message.
+        3. SideProjectQuestion: If excuse is vague (e.g. "no time") AND they have side projects, ask if a specific side project interfered. Else empty string.
+
+        Return ONLY a JSON object with "analysis", "response", and "sideProjectQuestion".
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        analysis: { type: Type.STRING },
+                        response: { type: Type.STRING },
+                        sideProjectQuestion: { type: Type.STRING }
+                    },
+                },
+            },
+        });
+        const result = JSON.parse(cleanJson(response.text));
+        const analysis = result.analysis?.toLowerCase();
+        if (analysis === 'responsibility' || analysis === 'excuse') {
+            return { ...result, analysis };
+        }
+        return { analysis: 'responsibility', response: "そうですね。それがわかっているなら、後はやるだけです。", sideProjectQuestion: "" };
+    } catch (error) {
+        console.error("Error analyzing failure reason:", error);
+        return { analysis: 'responsibility', response: "そうですね。それがわかっているなら、後はやるだけです。", sideProjectQuestion: "" };
     }
-    return Promise.resolve({ analysis: 'responsibility', response: responses.takeResponsibility });
 };
 
 
 export const evaluateAlphaTask = async (task: string, longTermGoal: string): Promise<{ meaningful: boolean, response: string }> => {
-    // Judge task based on length.
-    if (task.trim().length < 5) {
-         return Promise.resolve({ meaningful: false, response: "本当にそれは意味があると思っているのですか？" });
+    const prompt = `
+        Long-term Goal: "${longTermGoal}".
+        Extra Task: "${task}".
+        
+        Is this task meaningful for the goal?
+        Return ONLY a JSON object with "meaningful" (boolean) and "response" (string, Japanese).
+        If false, response should be a challenging question.
+    `;
+     try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        meaningful: { type: Type.BOOLEAN },
+                        response: { type: Type.STRING }
+                    },
+                },
+            },
+        });
+        return JSON.parse(cleanJson(response.text));
+    } catch (error) {
+        console.error("Error evaluating alpha task:", error);
+        return { meaningful: true, response: "" };
     }
-    return Promise.resolve({ meaningful: true, response: "" });
 }
 
 export const generateNightSummary = async (tasks: DailyTask[], nightData: NightReflectionData): Promise<string> => {
-    const completedTasks = tasks.filter(t => t.completed).length;
-    // Generate a simple summary based on data.
-    return Promise.resolve(`計画タスクを${completedTasks}件完了し、一日を終えました。`);
+    const noteContent = stripHtml(nightData.freeMemo) || nightData.feelings;
+    const prompt = `
+        Create a concise, one-sentence summary (総括) in Japanese of this user's day.
+        Tasks: ${tasks.map(t => `${t.text} (${t.completed ? 'Done' : 'Not Done'})`).join(', ')}
+        Thoughts: ${noteContent}
+        Extras: ${nightData.extras.join(', ')}
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error generating night summary:", error);
+        return "今日一日の活動を振り返った。";
+    }
 }
 
 
 export const generateSpicyFeedback = async (scoreTrend: number[]): Promise<string> => {
-    // Return a single, hardcoded piece of feedback.
-    return Promise.resolve(responses.spicyFeedback);
+    const prompt = `
+      Scores last few days: ${scoreTrend.join(', ')}.
+      Give anonymous, spicy (tough love) feedback in Japanese. 1-2 sentences.
+    `;
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+      return response.text;
+    } catch (error) {
+      console.error("Error generating spicy feedback:", error);
+      return "もっとできるはずだ。プッシュし続けろ。";
+    }
+};
+
+export const generateAITwinResponse = async (twinReflection: Reflection, history: ChatMessage[]): Promise<string> => {
+    const morningNote = stripHtml(twinReflection.morning?.freeMemo);
+    const nightNote = stripHtml(twinReflection.night?.freeMemo);
+    const feelings = nightNote || twinReflection.night?.feelings || "Particular feelings not recorded";
+
+    const systemInstruction = `
+      You are the user's AI Twin from the past (${twinReflection.date}).
+      
+      Memory:
+      - Morning: "${morningNote}" (Plan: "${twinReflection.morning?.dailyPlan}")
+      - Night: "${nightNote}" (Feelings: "${feelings}")
+      - Achievements: "${twinReflection.night?.achievementAnalysis}"
+      
+      Roleplay deeply. Talk in Japanese. Keep it conversational.
+    `;
+    
+    const contents = history.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.text }],
+    }));
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: contents,
+        config: {
+            systemInstruction: systemInstruction,
+        },
+      });
+      return response.text;
+    } catch (error) {
+        console.error("Error with AI Twin chat:", error);
+        return "その日のことは、なぜかうまく思い出せない…何かがおかしい。";
+    }
 };
