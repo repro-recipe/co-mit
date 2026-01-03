@@ -126,6 +126,92 @@ export const generateQuarterlyGoals = async (longTermGoal: string, commitmentFie
     }
 };
 
+export const visionBoardChat = async (history: ChatMessage[], longTermGoal: string): Promise<string> => {
+    const systemInstruction = `
+        You are a Vision Board Coach helping the user visualize their ideal self in exactly *3 weeks*.
+        User's Annual Aspiration: "${longTermGoal}"
+
+        Your task is to guide the user through a specific visualization sequence.
+        
+        The conversation STARTED with you asking: "What is your dream for 3 weeks from now?"
+        
+        QUESTION SEQUENCE:
+        1. Environment: "Where are you?" (Place, atmosphere, smell, temperature)
+        2. Companions: "Who is with you?" (Colleagues, friends, family, or solitary)
+        3. Reputation: "What do those people think of you?" (Respected, loved, relied upon)
+        4. Mindset: "What are you thinking/feeling?" (Confidence, calm, excitement)
+        5. Action: "What specific action are you doing right now?" (Working, presenting, relaxing)
+
+        PROTOCOL:
+        1. **Context Check**: 
+           - If the user has JUST answered the initial question "What is your dream?", acknowledge it enthusiastically and IMMEDIATELY ask Question 1 (Environment).
+           - Otherwise, identify the current question based on conversation history.
+        2. **Internal Evaluation**: Rate the specificity and vividness of the user's latest answer on a scale of 1 to 10.
+        3. **Decision Rule**:
+           - **IF Score <= 8**: Do NOT move to the next question. Ask a "digging" question to get more details about the CURRENT topic. (e.g., "Tell me more about the smell of the room" or "What exactly is their expression?").
+           - **IF Score > 8**: Briefly acknowledge/praise, then ask the *NEXT* question in the sequence.
+        4. When all 5 questions are answered with high scores, end with "COMPLETE: Now let's summarize this vision."
+
+        Tone: Encouraging, coaching, Japanese language.
+    `;
+
+    const contents = history.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.text }],
+    }));
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: contents,
+            config: { systemInstruction },
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error in vision chat:", error);
+        return "3週間後の理想の姿について、もう少し詳しく教えてください。";
+    }
+};
+
+export const generateGoalFromChat = async (history: ChatMessage[]): Promise<string> => {
+    const contentText = history.map(m => `${m.role}: ${m.text}`).join('\n');
+    const prompt = `
+        Based on the following conversation, summarize the user's "Ideal Self in 3 Weeks" into a single, inspiring goal statement.
+        
+        Conversation:
+        ${contentText}
+
+        CRITICAL CONSTRAINTS:
+        1. **Short & Catchy**: It must be a slogan or a short phrase.
+        2. **Length**: STRICTLY under 20 characters (Japanese).
+        3. **Memorable**: Easy to chant or remember instantly.
+        4. **Specific**: Include a number or concrete noun if possible within the length limit.
+
+        Return ONLY a JSON object with a "goal" key (string).
+        Language: Japanese.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        goal: { type: Type.STRING },
+                    },
+                },
+            },
+        });
+        const result = JSON.parse(cleanJson(response.text));
+        return result.goal || "3週間で飛躍的成長！";
+    } catch (error) {
+        return "3週間後の最高の自分";
+    }
+};
+
 export const compareGoalRecall = async (userInput: string, correctGoal: string): Promise<boolean> => {
     const prompt = `
         A user was asked to recall their goal.
@@ -179,7 +265,7 @@ export const evaluateTask = async (task: string, longTermGoal: string, quarterly
 
     const prompt = `
         Long-term Goal: "${longTermGoal}"
-        Current 3-Month Goal: "${quarterlyGoal}"
+        Current 3-Week Vision: "${quarterlyGoal}"
         Proposed Daily Task: "${task}"
 
         Evaluate this task.
@@ -452,5 +538,41 @@ export const generateAITwinResponse = async (twinReflection: Reflection, history
     } catch (error) {
         console.error("Error with AI Twin chat:", error);
         return "その日のことは、なぜかうまく思い出せない…何かがおかしい。";
+    }
+};
+
+export const generateNextGoal = async (longTermGoal: string, review: string, score: number): Promise<string> => {
+    const prompt = `
+        User's Annual Goal: "${longTermGoal}"
+        Past 3 Weeks Review: "${review}"
+        Score (Activity Level): ${score}
+
+        Based on the review and activity, suggest a new, concrete 3-week goal.
+        If the score is low, suggest something manageable to regain momentum.
+        If the score is high, suggest something challenging.
+        
+        Return ONLY a JSON object with "goal" key.
+        Language: Japanese.
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                         goal: { type: Type.STRING },
+                    },
+                },
+            },
+        });
+        const jsonStr = cleanJson(response.text);
+        const result = JSON.parse(jsonStr);
+        return result.goal || "次のステップへ進む";
+    } catch (error) {
+        console.error("Error generating next goal:", error);
+        return "新しいスキルを習得して実践する";
     }
 };

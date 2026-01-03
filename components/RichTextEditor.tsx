@@ -39,6 +39,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
 
   const ToolbarButton = ({ command, arg, icon, label, active = false }: { command: string, arg?: string, icon?: React.ReactNode, label?: string, active?: boolean }) => (
     <button
+      type="button"
       onClick={(e) => { e.preventDefault(); execCommand(command, arg); }}
       className={`p-2 rounded hover:bg-slate-200 transition text-slate-600 ${active ? 'bg-slate-200 text-sky-600' : ''}`}
       title={label || command}

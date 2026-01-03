@@ -1,20 +1,46 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { UserSettings, Reflection, DailyTask, AppView, AITwin, ChatMessage, NightReflectionData, MorningReflectionData, SideProject, Memo } from './types';
+import type { UserSettings, Reflection, DailyTask, AppView, ChatMessage, MorningReflectionData, NightReflectionData, SideProject, Memo } from './types';
 import * as geminiService from './services/geminiService';
-import { BrainCircuitIcon, CalendarIcon, FlameIcon, GoalIcon, GhostIcon, BotIcon, UserIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, VideoIcon, MessageSquareIcon, TrendingUpIcon, StarIcon } from './components/Icons';
-import CommitmentRoad from './components/Road';
-import Calendar from './components/Calendar';
+import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon } from './components/Icons';
+import GrowthGraph from './components/GrowthGraph';
 import RichTextEditor from './components/RichTextEditor';
 
 // --- Helpers ---
 
-// Get local date string YYYY-MM-DD
 const getLocalTodayDate = (date: Date = new Date()): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const getDaysDiff = (date1Str: string, date2Str: string): number => {
+    const d1 = new Date(date1Str);
+    const d2 = new Date(date2Str);
+    const diffTime = Math.abs(d2.getTime() - d1.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+};
+
+const migrateSettings = (settings: any): UserSettings => {
+    const today = getLocalTodayDate();
+    return {
+        ...settings,
+        commitmentStartDate: settings.commitmentStartDate || today,
+        threeWeekGoal: settings.threeWeekGoal || (settings.quarterlyGoals && settings.quarterlyGoals.length > 0 ? settings.quarterlyGoals[0] : ""),
+        isPrototyperRegistered: settings.isPrototyperRegistered ?? false,
+    };
+};
+
+const migrateReflections = (reflections: any[]): Reflection[] => {
+    return reflections.map(r => ({
+        ...r,
+        dailyTasks: r.dailyTasks?.map((t: any) => ({
+            ...t,
+            type: t.type || 'sub',
+            priority: t.priority || 'medium'
+        }))
+    }));
 };
 
 // --- UI Components ---
@@ -47,25 +73,17 @@ const SecondaryButton: React.FC<{ onClick: () => void, children: React.ReactNode
     </Button>
 );
 
-const Input: React.FC<{ value: string | number, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, placeholder?: string, type?: string, min?: number, step?: number, onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, disabled?: boolean, className?: string, id?: string }> = ({ value, onChange, placeholder, type = "text", className, ...props }) => (
-    <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
+const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className, ...props }) => (
+    <input 
         className={`w-full bg-slate-50 border-2 border-slate-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition text-slate-900 placeholder:text-slate-400 disabled:bg-slate-200 ${className}`}
-        {...props}
+        {...props} 
     />
 );
 
-const TextArea: React.FC<{ value: string, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void, placeholder?: string, rows?: number, className?: string, onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void, disabled?: boolean }> = ({ value, onChange, placeholder, rows = 4, className, ...props }) => (
-    <textarea
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        rows={rows}
+const TextArea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = ({ className, ...props }) => (
+    <textarea 
         className={`w-full bg-slate-50 border-2 border-slate-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition text-slate-900 placeholder:text-slate-400 disabled:bg-slate-200 ${className}`}
-        {...props}
+        {...props} 
     />
 );
 
@@ -77,7 +95,7 @@ const Modal: React.FC<{ isOpen: boolean, onClose: () => void, title: string, chi
                 <h2 className="text-2xl font-bold mb-4 text-sky-600 text-center">{title}</h2>
                 {children}
                 {!hideCloseButton && (
-                    <button onClick={onClose} className="absolute top-2 right-2 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors">
+                    <button type="button" onClick={onClose} className="absolute top-2 right-2 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 )}
@@ -86,101 +104,63 @@ const Modal: React.FC<{ isOpen: boolean, onClose: () => void, title: string, chi
     );
 };
 
-const MentoringModal: React.FC<{ isOpen: boolean, onSelect: (view: AppView) => void }> = ({ isOpen, onSelect }) => {
-    return (
-        <Modal isOpen={isOpen} onClose={() => {}} title="メンタリングに参加しましょう！" hideCloseButton={true}>
-            <div className="text-center">
-                <p className="text-slate-600 mb-6">少し疲れが見えるようです。一人で抱え込まず、仲間の力を借りてエネルギーを充填しましょう。</p>
-                <div className="space-y-3">
-                    <button onClick={() => onSelect('SPICY_FEEDBACK')} className="w-full flex items-center justify-between p-4 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-all group">
-                        <div className="flex items-center gap-3">
-                             <div className="bg-white p-2 rounded-full shadow-sm text-sky-500">
-                                <MessageSquareIcon className="w-5 h-5"/>
-                             </div>
-                             <span className="font-bold text-slate-700">仲間からのフィードバック</span>
-                        </div>
-                        <ChevronRightIcon className="w-5 h-5 text-slate-400 group-hover:text-sky-500" />
-                    </button>
-
-                    <button onClick={() => onSelect('AI_TWIN')} className="w-full flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition-all group">
-                         <div className="flex items-center gap-3">
-                             <div className="bg-white p-2 rounded-full shadow-sm text-purple-500">
-                                <GhostIcon className="w-5 h-5"/>
-                             </div>
-                             <span className="font-bold text-slate-700">過去の自分との対話</span>
-                        </div>
-                        <ChevronRightIcon className="w-5 h-5 text-slate-400 group-hover:text-purple-500" />
-                    </button>
-
-                    <button onClick={() => onSelect('PEER_PROFILE')} className="w-full flex items-center justify-between p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all group">
-                         <div className="flex items-center gap-3">
-                             <div className="bg-white p-2 rounded-full shadow-sm text-emerald-500">
-                                <UsersIcon className="w-5 h-5"/>
-                             </div>
-                             <span className="font-bold text-slate-700">仲間とのメンタリング</span>
-                        </div>
-                        <ChevronRightIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500" />
-                    </button>
-                </div>
-            </div>
-        </Modal>
-    );
-};
-
-const PrototypeModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-        <div className="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full text-center border-4 border-sky-500 animate-bounce-in">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">ご協力のお願い</h2>
-            <p className="text-slate-600 mb-6 text-sm">
-                co-mitのプロトタイプ検証にご参加いただきありがとうございます。<br/>
-                サービスの改善のため、まずは下記フォームより利用者登録をお願いいたします。
-            </p>
-            <a 
-                href="https://forms.gle/Shdjdj8gbtu8hJR39" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                onClick={onClose}
-                className="block w-full bg-sky-500 text-white font-bold py-3 rounded-lg hover:bg-sky-600 transition mb-4 shadow-md flex items-center justify-center gap-2"
-            >
-                <span>利用者登録フォームを開く</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-            </a>
-            <button onClick={onClose} className="text-slate-400 text-xs hover:text-slate-600 underline">
-                登録済みの方 / 後でする
-            </button>
-        </div>
-    </div>
-);
-
-const PrototypeBanner: React.FC = () => (
-    <div className="fixed top-14 right-4 z-[90] bg-yellow-50/90 backdrop-blur border border-yellow-200 shadow-md rounded-lg p-2 text-xs text-right max-w-[220px]">
-        <p className="mb-1 text-slate-700 font-bold">⚠️ プロトタイプ検証のお願い</p>
-        <p className="mb-1 text-slate-600">利用者の登録をお願いします</p>
-        <a 
-            href="https://forms.gle/Shdjdj8gbtu8hJR39" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="text-sky-600 font-bold underline hover:text-sky-800 block break-all"
-        >
-            https://forms.gle/Shdjdj8gbtu8hJR39
-        </a>
-    </div>
-);
-
 const LoadingSpinner: React.FC = () => (
     <div className="flex justify-center items-center h-full min-h-[200px]">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-sky-500"></div>
     </div>
 );
 
+const LoadingOverlay: React.FC = () => (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/20 backdrop-blur-sm transition-opacity animate-fade-in">
+        <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-sky-500"></div>
+            <p className="text-sm font-bold text-slate-600 animate-pulse">AI思考中...</p>
+        </div>
+    </div>
+);
+
+const PrototypeRegistrationModal: React.FC<{ onRegister: () => void }> = ({ onRegister }) => (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden relative transform transition-all scale-100">
+             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-sky-400 via-indigo-500 to-sky-400"></div>
+             <div className="p-8 md:p-10 text-center">
+                <div className="mb-6 inline-flex items-center justify-center p-4 rounded-full bg-sky-50 text-sky-600 mb-6 ring-4 ring-sky-50/50">
+                    <CoMitLogoIcon className="w-16 h-20" />
+                </div>
+                
+                <h2 className="text-2xl font-black text-slate-800 mb-2">co-mit プロトタイプ</h2>
+                <div className="flex justify-center mb-6">
+                    <span className="bg-sky-100 text-sky-700 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-widest uppercase border border-sky-200">Early Access</span>
+                </div>
+
+                <p className="text-lg font-bold text-slate-700 mb-2">
+                    「振り返り、実践することで<br/>行動改善に革命を！！」
+                </p>
+                <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                    AIパートナーと共に目標達成を目指す<br/>
+                    新しい習慣形成アプリへようこそ。<br/>
+                    現在はプロトタイプ期間中です。
+                </p>
+
+                <button 
+                    type="button"
+                    onClick={onRegister}
+                    className="w-full bg-slate-900 text-white font-bold text-lg py-4 rounded-xl shadow-xl hover:bg-slate-800 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 group"
+                >
+                    <span>革命に参加する</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-1 transition-transform"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </button>
+             </div>
+        </div>
+    </div>
+);
+
 const Clock: React.FC = () => {
     const [time, setTime] = useState(new Date());
-
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
-
     return (
         <div className="fixed top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full shadow-md text-xs font-mono font-bold text-slate-600 border border-slate-200 z-[100] flex gap-2 items-center">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -192,7 +172,7 @@ const Clock: React.FC = () => {
 const Header: React.FC<{ title: string, onBack?: () => void }> = ({ title, onBack }) => (
     <header className="flex items-center mb-6">
         {onBack && (
-            <button onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-slate-200 transition">
+            <button type="button" onClick={onBack} className="mr-4 p-2 rounded-full hover:bg-slate-200 transition">
                 <ChevronLeftIcon className="w-6 h-6" />
             </button>
         )}
@@ -200,14 +180,35 @@ const Header: React.FC<{ title: string, onBack?: () => void }> = ({ title, onBac
     </header>
 );
 
-// --- App Views ---
+// --- Sub Views ---
 
 const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading: (loading: boolean) => void }> = ({ onSave, setLoading }) => {
     const [step, setStep] = useState(1);
     const [commitmentField, setCommitmentField] = useState("");
     const [longTermGoal, setLongTermGoal] = useState("");
-    const [quarterlyGoals, setQuarterlyGoals] = useState<[string, string, string, string]>(["", "", "", ""]);
     const [suggestions, setSuggestions] = useState<string[]>([]);
+    
+    // Step 3 Chat State
+    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [threeWeekGoal, setThreeWeekGoal] = useState("");
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (step === 3 && chatHistory.length === 0) {
+            setChatHistory([{
+                role: 'model',
+                text: `「${longTermGoal}」。素晴らしいと思います。\n\nそれでは、もう少し短期で考えてみましょう。あなたの**3週間後の夢**は何ですか？`
+            }]);
+        }
+    }, [step, longTermGoal]);
+
+    useEffect(() => {
+        if (chatScrollRef.current) {
+            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+    }, [chatHistory]);
 
     const handleGenerateSuggestions = async () => {
         if (!commitmentField) return;
@@ -216,23 +217,32 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
         setSuggestions(newSuggestions);
         setLoading(false);
     };
-    
-    const handleGenerateQuarterlyGoals = async () => {
-        if (!longTermGoal || !commitmentField) return;
+
+    const handleChatSend = async () => {
+        if (!chatInput.trim()) return;
+        const userMsg = { role: 'user' as const, text: chatInput };
+        const newHistory = [...chatHistory, userMsg];
+        setChatHistory(newHistory);
+        setChatInput("");
+        setIsChatLoading(true);
+        const responseText = await geminiService.visionBoardChat(newHistory, longTermGoal);
+        setChatHistory([...newHistory, { role: 'model', text: responseText }]);
+        setIsChatLoading(false);
+    };
+
+    const handleFinishChat = async () => {
         setLoading(true);
-        const goals = await geminiService.generateQuarterlyGoals(longTermGoal, commitmentField);
-        if (goals.length === 4) {
-            setQuarterlyGoals(goals as [string, string, string, string]);
-        }
+        const goal = await geminiService.generateGoalFromChat(chatHistory);
+        setThreeWeekGoal(goal);
         setLoading(false);
-    }
+    };
 
     const handleSave = () => {
         const settings: UserSettings = {
             longTermGoal,
-            quarterlyGoals,
+            threeWeekGoal,
             yearStartMonth: new Date().getMonth(),
-            commitmentStartDate: getLocalTodayDate(), // Use local date
+            commitmentStartDate: getLocalTodayDate(),
             goalDurationDays: 365,
             depositAmount: 0,
         };
@@ -253,47 +263,31 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
             case 2:
                 return (
                     <>
-                        <h2 className="text-xl font-semibold mb-4">Step 2: 年間ゴール</h2>
-                        
+                        <h2 className="text-xl font-semibold mb-4">Step 2: 1年の抱負</h2>
                         <div className="mb-4 p-3 bg-slate-100 rounded-lg">
                             <span className="text-xs font-bold text-slate-500 block uppercase">選択した分野</span>
                             <p className="text-slate-800 font-semibold">{commitmentField}</p>
                         </div>
-
-                        <p className="text-slate-600 mb-4">1年後の理想の状態を具体的に記述してください。</p>
-                        
-                        <TextArea 
-                            value={longTermGoal} 
-                            onChange={(e) => setLongTermGoal(e.target.value)} 
-                            placeholder="例：Webサービスを自力で開発し、1000人のユーザーを獲得する" 
-                            rows={3}
-                            className="mb-4"
-                        />
-                        
+                        <p className="text-slate-600 mb-4">1年後の厳密なゴールを決める必要はありません。モチベーションの源泉となる「抱負」を言葉にしましょう。</p>
+                        <TextArea value={longTermGoal} onChange={(e) => setLongTermGoal(e.target.value)} placeholder="例：技術を楽しみながら、周りから頼られるエンジニアになる" rows={3} className="mb-4"/>
                         <div className="flex justify-end mb-6">
                              <SecondaryButton onClick={handleGenerateSuggestions} className="flex items-center gap-2 text-sm">
                                 <BotIcon className="w-4 h-4 text-sky-600" />
-                                AIに目標案を提案してもらう
+                                AIに抱負のアイデアを提案してもらう
                             </SecondaryButton>
                         </div>
-
                         {suggestions.length > 0 && (
                             <div className="mb-6">
-                                <p className="text-sm text-slate-500 mb-2 font-bold">AIからの提案 (クリックして選択):</p>
+                                <p className="text-sm text-slate-500 mb-2 font-bold">AIからの提案:</p>
                                 <div className="grid gap-2">
                                     {suggestions.map((s, i) => (
-                                        <button 
-                                            key={i} 
-                                            onClick={() => setLongTermGoal(s)} 
-                                            className="w-full text-left p-3 bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50 rounded-md transition shadow-sm"
-                                        >
+                                        <button type="button" key={i} onClick={() => setLongTermGoal(s)} className="w-full text-left p-3 bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50 rounded-md transition shadow-sm">
                                             {s}
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         )}
-                        
                         <div className="flex gap-3 mt-8">
                             <SecondaryButton onClick={() => setStep(1)} className="flex-1">戻る</SecondaryButton>
                             <PrimaryButton onClick={() => setStep(3)} disabled={!longTermGoal} className="flex-1">次へ</PrimaryButton>
@@ -303,47 +297,43 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
             case 3:
                 return (
                     <>
-                        <h2 className="text-xl font-semibold mb-2">Step 3: 3ヶ月ごとのゴール</h2>
-                        <div className="mb-4 p-3 bg-slate-100 rounded-lg">
-                            <span className="text-xs font-bold text-slate-500 block uppercase">年間ゴール</span>
-                            <p className="text-slate-800 font-semibold">{longTermGoal}</p>
-                        </div>
-                        <p className="text-slate-600 mb-4">年間ゴールを達成するために、3ヶ月ごとに何を達成すべきか設定しましょう。</p>
-                        
-                        <div className="flex justify-end mb-4">
-                             <SecondaryButton onClick={handleGenerateQuarterlyGoals} className="flex items-center gap-2 text-sm">
-                                <BotIcon className="w-4 h-4 text-sky-600" />
-                                AIに中間目標を提案してもらう
-                            </SecondaryButton>
-                        </div>
-
-                        <div className="space-y-4">
-                            {quarterlyGoals.map((g, i) => (
-                                <div key={i}>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">{i * 3 + 1}〜{i * 3 + 3}ヶ月目</label>
-                                    <Input
-                                        value={g}
-                                        onChange={(e) => {
-                                            const newGoals = [...quarterlyGoals] as [string, string, string, string];
-                                            newGoals[i] = e.target.value;
-                                            setQuarterlyGoals(newGoals);
-                                        }}
-                                        placeholder={`${(i * 3) + 1}〜${(i + 1) * 3}ヶ月目のゴール`}
-                                    />
+                        <h2 className="text-xl font-semibold mb-2">Step 3: 3週間後のビジョン</h2>
+                        {!threeWeekGoal ? (
+                            <div className="flex flex-col h-[400px]">
+                                <p className="text-slate-600 text-sm mb-2">AIコーチと対話して、3週間後の「最高にワクワクする状態」を具体化しましょう。</p>
+                                <div className="flex-1 overflow-y-auto bg-slate-50 rounded-lg p-4 mb-4 border border-slate-200" ref={chatScrollRef}>
+                                    {chatHistory.map((msg, i) => (
+                                        <div key={i} className={`flex mb-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-sky-500 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'}`}>
+                                                {msg.text}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isChatLoading && <div className="text-xs text-slate-400 animate-pulse">AIが考え中...</div>}
                                 </div>
-                            ))}
-                        </div>
-                        
-                        <div className="flex gap-3 mt-8">
-                            <SecondaryButton onClick={() => setStep(2)} className="flex-1">戻る</SecondaryButton>
-                            <PrimaryButton onClick={handleSave} disabled={quarterlyGoals.some(g => !g)} className="flex-1">設定完了</PrimaryButton>
-                        </div>
+                                <div className="flex gap-2 mb-4">
+                                    <Input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleChatSend()} placeholder="返信を入力..." className="flex-1" />
+                                    <button type="button" onClick={handleChatSend} disabled={!chatInput || isChatLoading} className="bg-sky-500 text-white p-2 rounded hover:bg-sky-600 transition disabled:opacity-50"><SendIcon className="w-5 h-5"/></button>
+                                </div>
+                                <PrimaryButton onClick={handleFinishChat} disabled={chatHistory.length < 5} className="w-full">
+                                    {chatHistory.length < 5 ? "もう少し対話を続ける" : "この内容で3週間のゴールを生成"}
+                                </PrimaryButton>
+                            </div>
+                        ) : (
+                            <div className="animate-fade-in">
+                                <h3 className="font-bold text-sky-600 mb-2">生成された3週間のゴール:</h3>
+                                <TextArea value={threeWeekGoal} onChange={(e) => setThreeWeekGoal(e.target.value)} className="mb-6 text-lg font-bold text-slate-800" />
+                                <div className="flex gap-3">
+                                    <SecondaryButton onClick={() => setThreeWeekGoal("")} className="flex-1">修正する</SecondaryButton>
+                                    <PrimaryButton onClick={handleSave} className="flex-1">設定完了</PrimaryButton>
+                                </div>
+                            </div>
+                        )}
                     </>
                 );
             default: return null;
         }
     }
-
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
             <Card className="w-full max-w-2xl">
@@ -362,13 +352,12 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
 
 const DepositView: React.FC<{ onSave: (amount: number) => void }> = ({ onSave }) => {
     const [amount, setAmount] = useState(1000);
-
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
             <Card className="w-full max-w-md text-center">
                 <PiggyBankIcon className="w-16 h-16 mx-auto text-sky-500 mb-4" />
                 <h1 className="text-2xl font-bold mb-2">デポジット設定</h1>
-                <p className="text-slate-600 mb-6">目標未達の場合に失うデポジット額を設定します。これによりコミットメントを高めます。(このアプリはシミュレーションです。実際に課金はされません)</p>
+                <p className="text-slate-600 mb-6">目標未達の場合に失うデポジット額を設定します。</p>
                 <div className="flex items-center justify-center gap-4 mb-8">
                     <span className="text-3xl font-bold text-slate-800">¥</span>
                     <Input id="deposit" type="number" min={0} step={100} value={amount} onChange={e => setAmount(Number(e.target.value))} className="text-3xl font-bold text-center w-48" />
@@ -390,14 +379,12 @@ const DashboardView: React.FC<{
     onNavigate: (view: AppView) => void;
     onUpdateTasks: (tasks: DailyTask[]) => void;
 }> = ({ settings, reflections, totalScore, currentStreak, currentQuarterlyGoal, todayStr, currentReflection, onNavigate, onUpdateTasks }) => {
-    
     const toggleTaskCompletion = (index: number) => {
         if (!currentReflection || !currentReflection.dailyTasks) return;
         const newTasks = [...currentReflection.dailyTasks];
         newTasks[index].completed = !newTasks[index].completed;
         onUpdateTasks(newTasks);
     };
-    
     const priorityIcon = (priority: 'high' | 'medium' | 'low') => {
         switch(priority) {
             case 'high': return <FlameIcon className="w-5 h-5 text-red-500" />;
@@ -406,34 +393,25 @@ const DashboardView: React.FC<{
             default: return null;
         }
     };
-
     return (
         <div className="space-y-6">
             <header className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="col-span-1 md:col-span-2">
-                    <h2 className="text-sm font-bold text-sky-600 mb-1">現在の3ヶ月ゴール</h2>
+                    <h2 className="text-sm font-bold text-sky-600 mb-1">現在の3週間ゴール</h2>
                     <p className="text-lg font-semibold text-slate-800">{currentQuarterlyGoal}</p>
                 </Card>
                 <div className="grid grid-cols-2 gap-4">
                     <Card className="text-center">
-                        <div className="flex items-center justify-center">
-                           <StarIcon className="w-6 h-6 text-amber-400 mr-2"/>
-                           <h2 className="text-sm font-bold text-slate-500 mb-1">合計スコア</h2>
-                        </div>
+                        <div className="flex items-center justify-center"><StarIcon className="w-6 h-6 text-amber-400 mr-2"/><h2 className="text-sm font-bold text-slate-500 mb-1">合計スコア</h2></div>
                         <p className="text-3xl font-bold">{totalScore}</p>
                     </Card>
                     <Card className="text-center">
-                       <div className="flex items-center justify-center">
-                           <TrendingUpIcon className="w-6 h-6 text-emerald-500 mr-2"/>
-                           <h2 className="text-sm font-bold text-slate-500 mb-1">継続日数</h2>
-                        </div>
+                       <div className="flex items-center justify-center"><TrendingUpIcon className="w-6 h-6 text-emerald-500 mr-2"/><h2 className="text-sm font-bold text-slate-500 mb-1">継続日数</h2></div>
                         <p className="text-3xl font-bold">{currentStreak}</p>
                     </Card>
                 </div>
             </header>
-
-            <CommitmentRoad totalScore={totalScore} />
-
+            <GrowthGraph reflections={reflections} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card>
@@ -447,52 +425,28 @@ const DashboardView: React.FC<{
                                 <span className="text-sky-600 font-bold bg-sky-100 px-3 py-1 rounded-full">完了</span>
                             )}
                         </div>
-                        
                         {currentReflection?.dailyTasks && currentReflection.dailyTasks.length > 0 ? (
                             <ul className="space-y-3">
                                 {currentReflection.dailyTasks.map((task, idx) => (
                                     <li key={idx} className="flex items-center p-3 bg-slate-50 rounded-lg border border-slate-100 transition-all hover:shadow-sm">
-                                        <input
-                                            type="checkbox"
-                                            checked={task.completed}
-                                            onChange={() => toggleTaskCompletion(idx)}
-                                            className="task-checkbox mr-4"
-                                            id={`task-${idx}`}
-                                        />
+                                        <input type="checkbox" checked={task.completed} onChange={() => toggleTaskCompletion(idx)} className="task-checkbox mr-4" id={`task-${idx}`}/>
                                         <label htmlFor={`task-${idx}`} className={`flex-1 task-label cursor-pointer font-medium ${task.completed ? "text-slate-400 line-through" : "text-slate-700"}`}>
                                             {task.text}
                                         </label>
-                                        <div className="ml-2" title={`Priority: ${task.priority}`}>
-                                            {priorityIcon(task.priority)}
-                                        </div>
+                                        <div className="ml-2" title={`Priority: ${task.priority}`}>{priorityIcon(task.priority)}</div>
                                     </li>
                                 ))}
                             </ul>
                         ) : (
-                            <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
-                                <p>まだタスクが設定されていません</p>
-                            </div>
+                            <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200"><p>まだタスクが設定されていません</p></div>
                         )}
                     </Card>
                 </div>
-
                 <div className="space-y-4">
-                     <button onClick={() => onNavigate('SPICY_FEEDBACK')} className="w-full bg-gradient-to-r from-orange-400 to-red-500 text-white p-4 rounded-xl shadow-lg hover:from-orange-500 hover:to-red-600 transition flex items-center justify-center gap-2 font-bold transform hover:scale-[1.02]">
-                        <MessageSquareIcon className="w-6 h-6" />
-                        仲間の声
-                    </button>
-                    <button onClick={() => onNavigate('AI_TWIN')} className="w-full bg-white text-purple-600 border-2 border-purple-200 p-4 rounded-xl shadow-sm hover:bg-purple-50 transition flex items-center justify-center gap-2 font-bold">
-                        <GhostIcon className="w-6 h-6" />
-                        AIツインと話す
-                    </button>
-                    <button onClick={() => onNavigate('SIDE_PROJECTS')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold">
-                        <BrainCircuitIcon className="w-5 h-5 text-slate-500" />
-                        サイドプロジェクト
-                    </button>
-                    <button onClick={() => onNavigate('MEMO_PAD')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold">
-                        <FileTextIcon className="w-5 h-5 text-slate-500" />
-                        メモ
-                    </button>
+                     <button type="button" onClick={() => onNavigate('SPICY_FEEDBACK')} className="w-full bg-gradient-to-r from-orange-400 to-red-500 text-white p-4 rounded-xl shadow-lg hover:from-orange-500 hover:to-red-600 transition flex items-center justify-center gap-2 font-bold transform hover:scale-[1.02]"><MessageSquareIcon className="w-6 h-6" />仲間の声</button>
+                    <button type="button" onClick={() => onNavigate('AI_TWIN')} className="w-full bg-white text-purple-600 border-2 border-purple-200 p-4 rounded-xl shadow-sm hover:bg-purple-50 transition flex items-center justify-center gap-2 font-bold"><GhostIcon className="w-6 h-6" />AIツインと話す</button>
+                    <button type="button" onClick={() => onNavigate('SIDE_PROJECTS')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><BrainCircuitIcon className="w-5 h-5 text-slate-500" />サイドプロジェクト</button>
+                    <button type="button" onClick={() => onNavigate('MEMO_PAD')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><FileTextIcon className="w-5 h-5 text-slate-500" />メモ</button>
                 </div>
             </div>
         </div>
@@ -511,38 +465,30 @@ const MorningConversationView: React.FC<{
     const [taskInput, setTaskInput] = useState("");
     const [aiResponse, setAiResponse] = useState<string | null>(null);
     const [taskSteps, setTaskSteps] = useState<string[]>([]);
-    
-    // Multiple Tasks Support
+    const [goalCheckResult, setGoalCheckResult] = useState<{ match: boolean } | null>(null);
     const [tempTasks, setTempTasks] = useState<DailyTask[]>([]);
     const [isFirstTask, setIsFirstTask] = useState(true);
-
     const [freeMemo, setFreeMemo] = useState("");
     const [penalty, setPenalty] = useState(0);
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleGoalRecallSubmit = async () => {
         setLoading(true);
         const match = await geminiService.compareGoalRecall(goalRecallInput, quarterlyGoal);
         setLoading(false);
-        if (match) {
-            setStep(2);
-        } else {
-            alert("目標と一致しません。ペナルティとして-5点となりますが、次へ進みます。目標を再確認してください。");
+        setGoalCheckResult({ match });
+        if (!match) {
             setPenalty(5);
-            setStep(2);
         }
     };
+    const handleProceedToTask = () => setStep(2);
 
     const handleTaskEvaluate = async () => {
         if(!taskInput) return;
         setLoading(true);
         const evaluation = await geminiService.evaluateTask(taskInput, longTermGoal, quarterlyGoal, isFirstTask);
         setLoading(false);
-        
         setAiResponse(evaluation.response);
-        // If appropriate, user can proceed. If insufficient, they stay to retry.
-        if (evaluation.judgment === 'appropriate') {
-             // Show confirmation button in UI
-        }
     };
 
     const handleConfirmTask = async () => {
@@ -554,165 +500,100 @@ const MorningConversationView: React.FC<{
     };
 
     const handleAddTaskToTemp = () => {
-        const mainTask: DailyTask = {
-            text: taskInput,
-            completed: false,
-            type: isFirstTask ? 'main' : 'sub',
-            priority: isFirstTask ? 'high' : 'medium'
-        };
-        
-        // Add breakdown steps as sub-tasks (low priority)
-        const subTasks: DailyTask[] = taskSteps.map(step => ({
-            text: step,
-            completed: false,
-            type: 'sub' as const,
-            priority: 'low' as const
-        })).filter(t => t.text.trim() !== "");
-
+        const mainTask: DailyTask = { text: taskInput, completed: false, type: isFirstTask ? 'main' : 'sub', priority: isFirstTask ? 'high' : 'medium' };
+        const subTasks: DailyTask[] = taskSteps.map(step => ({ text: step, completed: false, type: 'sub' as const, priority: 'low' as const })).filter(t => t.text.trim() !== "");
         setTempTasks([...tempTasks, mainTask, ...subTasks]);
-        
-        // Reset for next task
         setTaskInput("");
         setAiResponse(null);
         setTaskSteps([]);
         setIsFirstTask(false);
-        setStep(2); // Go back to task input
+        setStep(2);
     };
 
     const handleFinishPlanning = () => {
-        const mainTask: DailyTask = {
-            text: taskInput,
-            completed: false,
-            type: isFirstTask ? 'main' : 'sub',
-            priority: isFirstTask ? 'high' : 'medium'
-        };
-
-        // Add breakdown steps as sub-tasks
-        const subTasks: DailyTask[] = taskSteps.map(step => ({
-            text: step,
-            completed: false,
-            type: 'sub' as const,
-            priority: 'low' as const
-        })).filter(t => t.text.trim() !== "");
-
+        const mainTask: DailyTask = { text: taskInput, completed: false, type: isFirstTask ? 'main' : 'sub', priority: isFirstTask ? 'high' : 'medium' };
+        const subTasks: DailyTask[] = taskSteps.map(step => ({ text: step, completed: false, type: 'sub' as const, priority: 'low' as const })).filter(t => t.text.trim() !== "");
         setTempTasks([...tempTasks, mainTask, ...subTasks]);
-        setStep(5); // Go to free memo
+        setStep(5);
     };
 
     const handleSaveAll = () => {
-        const data: MorningReflectionData = {
-            dailyPlan: tempTasks.map(t => t.text).join(', '),
-            freeMemo: freeMemo
-        };
+        if(isSaving) return;
+        setIsSaving(true);
+        const data: MorningReflectionData = { dailyPlan: tempTasks.map(t => t.text).join(', '), freeMemo: freeMemo };
         onSave(data, tempTasks, penalty);
     };
 
     return (
         <Card className="max-w-2xl mx-auto">
             <Header title="朝の作戦会議" onBack={onBack} />
-            
             {step === 1 && (
                 <div className="animate-fade-in">
-                    <p className="mb-4 text-slate-600">あなたの3ヶ月ごとのゴールは何ですか？何も見ずに入力してください。</p>
-                    <TextArea value={goalRecallInput} onChange={(e) => setGoalRecallInput(e.target.value)} placeholder="ゴールを入力..." className="mb-4" />
-                    <PrimaryButton onClick={handleGoalRecallSubmit} disabled={!goalRecallInput} className="w-full">確認</PrimaryButton>
+                    <p className="mb-4 text-slate-600">今の「3週間ゴール」は何ですか？何も見ずに入力してください。</p>
+                    {!goalCheckResult ? (
+                        <>
+                            <TextArea value={goalRecallInput} onChange={(e) => setGoalRecallInput(e.target.value)} placeholder="ゴールを入力..." className="mb-4" />
+                            <PrimaryButton onClick={handleGoalRecallSubmit} disabled={!goalRecallInput} className="w-full">確認</PrimaryButton>
+                        </>
+                    ) : (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-4 text-center">
+                            {goalCheckResult.match ? (
+                                <div className="mb-4">
+                                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-emerald-600">素晴らしい！正解です</h3>
+                                    <p className="text-sm text-slate-500">ゴールをしっかり意識できています。</p>
+                                </div>
+                            ) : (
+                                <div className="mb-4">
+                                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 text-rose-600 mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-rose-600">惜しい...</h3>
+                                    <p className="text-sm text-slate-500">正確なゴールと少しずれています。<br/>ペナルティとして <span className="font-bold text-rose-600">-5pt</span> となります。</p>
+                                </div>
+                            )}
+                            <div className="bg-white border border-slate-200 rounded p-3 mb-6 text-left">
+                                <p className="text-xs text-slate-400 font-bold mb-1 uppercase">本来のゴール</p>
+                                <p className="font-bold text-slate-800">{quarterlyGoal}</p>
+                            </div>
+                            <PrimaryButton onClick={handleProceedToTask} className="w-full">次へ進む</PrimaryButton>
+                        </div>
+                    )}
                 </div>
             )}
-
             {step === 2 && (
                 <div className="animate-fade-in">
                     <p className="mb-2 font-bold text-sky-600">{isFirstTask ? "今日の最重要タスク" : "追加のタスク"}</p>
-                    <p className="mb-4 text-slate-600">
-                        {isFirstTask 
-                            ? "今日、これさえ達成できれば100点と言えるタスクを1つ決めてください。" 
-                            : "他にやっておきたいタスクがあれば追加してください。"}
-                    </p>
+                    <p className="mb-4 text-slate-600">{isFirstTask ? "今日、これさえ達成できれば100点と言えるタスクを1つ決めてください。" : "他にやっておきたいタスクがあれば追加してください。"}</p>
                     <Input value={taskInput} onChange={(e) => setTaskInput(e.target.value)} placeholder="タスクを入力..." className="mb-4" />
-                    
-                    {aiResponse && (
-                        <div className="bg-slate-100 p-4 rounded-lg mb-4 border-l-4 border-sky-500">
-                            <div className="flex items-start gap-3">
-                                <BotIcon className="w-6 h-6 text-sky-600 mt-1 flex-shrink-0" />
-                                <p className="text-slate-700">{aiResponse}</p>
-                            </div>
-                        </div>
-                    )}
-
+                    {aiResponse && <div className="bg-slate-100 p-4 rounded-lg mb-4 border-l-4 border-sky-500"><div className="flex items-start gap-3"><BotIcon className="w-6 h-6 text-sky-600 mt-1 flex-shrink-0" /><p className="text-slate-700">{aiResponse}</p></div></div>}
                     {!aiResponse ? (
                         <PrimaryButton onClick={handleTaskEvaluate} disabled={!taskInput} className="w-full">AIに評価してもらう</PrimaryButton>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
-                            <SecondaryButton onClick={() => setAiResponse(null)}>修正する</SecondaryButton>
-                            <PrimaryButton onClick={handleConfirmTask}>計画を立てる</PrimaryButton>
-                        </div>
+                        <div className="grid grid-cols-2 gap-3"><SecondaryButton onClick={() => setAiResponse(null)}>修正する</SecondaryButton><PrimaryButton onClick={handleConfirmTask}>計画を立てる</PrimaryButton></div>
                     )}
                 </div>
             )}
-            
             {step === 4 && (
                 <div className="animate-fade-in">
                     <h3 className="font-bold text-lg mb-4 text-slate-800">行動プランの編集</h3>
                     <p className="text-sm text-slate-500 mb-4">AIが提案したステップを編集できます。これらはサブタスクとして追加されます。</p>
-                    
                     <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6">
                         <h4 className="font-bold text-sky-600 mb-4 text-lg border-b border-slate-100 pb-2">{taskInput}</h4>
-                        <div className="space-y-3">
-                            {taskSteps.map((step, index) => (
-                                <div key={index} className="flex items-center gap-2">
-                                    <span className="font-bold text-slate-400 w-6 text-center">{index + 1}.</span>
-                                    <Input
-                                        value={step}
-                                        onChange={(e) => {
-                                            const newSteps = [...taskSteps];
-                                            newSteps[index] = e.target.value;
-                                            setTaskSteps(newSteps);
-                                        }}
-                                        className="flex-1"
-                                        placeholder={`ステップ ${index + 1}`}
-                                    />
-                                    <button
-                                        onClick={() => {
-                                            const newSteps = taskSteps.filter((_, i) => i !== index);
-                                            setTaskSteps(newSteps);
-                                        }}
-                                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition"
-                                        title="削除"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                        <button
-                            onClick={() => setTaskSteps([...taskSteps, ""])}
-                            className="mt-3 text-sm text-sky-500 font-bold hover:underline flex items-center gap-1"
-                        >
-                            + ステップを追加
-                        </button>
+                        <div className="space-y-3">{taskSteps.map((step, index) => (<div key={index} className="flex items-center gap-2"><span className="font-bold text-slate-400 w-6 text-center">{index + 1}.</span><Input value={step} onChange={(e) => { const newSteps = [...taskSteps]; newSteps[index] = e.target.value; setTaskSteps(newSteps); }} className="flex-1" placeholder={`ステップ ${index + 1}`} /><button type="button" onClick={() => { const newSteps = taskSteps.filter((_, i) => i !== index); setTaskSteps(newSteps); }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition" title="削除">x</button></div>))}</div>
+                        <button type="button" onClick={() => setTaskSteps([...taskSteps, ""])} className="mt-3 text-sm text-sky-500 font-bold hover:underline flex items-center gap-1">+ ステップを追加</button>
                     </div>
-                    
-                    <div className="flex flex-col gap-3">
-                        <SecondaryButton onClick={handleAddTaskToTemp} className="w-full flex items-center justify-center gap-2">
-                            <span className="text-xl font-bold">+</span> さらに今日のタスクを追加する
-                        </SecondaryButton>
-                        <PrimaryButton onClick={handleFinishPlanning} className="w-full">
-                            この内容で決定して次に進む
-                        </PrimaryButton>
-                    </div>
+                    <div className="flex flex-col gap-3"><SecondaryButton onClick={handleAddTaskToTemp} className="w-full flex items-center justify-center gap-2"><span className="text-xl font-bold">+</span> さらに今日のタスクを追加する</SecondaryButton><PrimaryButton onClick={handleFinishPlanning} className="w-full">この内容で決定して次に進む</PrimaryButton></div>
                 </div>
             )}
-
             {step === 5 && (
                  <div className="animate-fade-in">
                     <h3 className="font-bold text-lg mb-2 text-slate-800">フリーノート (任意)</h3>
                     <p className="text-slate-600 mb-4 text-sm">今の気持ちや、今日の意気込みを自由に書いてください。これはAI Twinの育成に使われます。</p>
-                    <RichTextEditor
-                        value={freeMemo}
-                        onChange={setFreeMemo}
-                        placeholder="今日はどんな1日にしたい？"
-                        className="mb-6"
-                    />
-                    <PrimaryButton onClick={handleSaveAll} className="w-full">朝のジャーナリングを完了</PrimaryButton>
+                    <RichTextEditor value={freeMemo} onChange={setFreeMemo} placeholder="今日はどんな1日にしたい？" className="mb-6" />
+                    <PrimaryButton onClick={handleSaveAll} disabled={isSaving} className="w-full">{isSaving ? "保存中..." : "朝のジャーナリングを完了"}</PrimaryButton>
                 </div>
             )}
         </Card>
@@ -727,636 +608,372 @@ const NightReflectionView: React.FC<{
     setLoading: (loading: boolean) => void;
 }> = ({ tasks, sideProjects, onSave, onBack, setLoading }) => {
     const [step, setStep] = useState(1);
-    const [localTasks, setLocalTasks] = useState<DailyTask[]>(tasks); // Keep local state for checking off
-    
-    // Data Fields
-    const [feelings, setFeelings] = useState(""); // Used as freeMemo now
-    const [achievementAnalysis, setAchievementAnalysis] = useState("");
+    const [localTasks, setLocalTasks] = useState<DailyTask[]>(tasks);
+    const [feelings, setFeelings] = useState(""); 
     const [wastedTime, setWastedTime] = useState("");
-    const [extrasInput, setExtrasInput] = useState("");
-    const [tomorrowIdeas, setTomorrowIdeas] = useState("");
-
-    // Failure Analysis State
-    const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+    const [isSaving, setIsSaving] = useState(false);
+    const [extrasList, setExtrasList] = useState<string[]>([]);
+    const [extraInput, setExtraInput] = useState("");
     const [failureReason, setFailureReason] = useState("");
     const [aiFailureFeedback, setAiFailureFeedback] = useState("");
     
     const uncompletedTasks = localTasks.filter(t => !t.completed);
-
-    const toggleLocalTask = (index: number) => {
-        const newTasks = [...localTasks];
-        newTasks[index].completed = !newTasks[index].completed;
-        setLocalTasks(newTasks);
-    };
-
-    const handleFailureAnalysis = async () => {
-        setLoading(true);
-        const result = await geminiService.analyzeFailureReason(failureReason, sideProjects);
-        setLoading(false);
-        setAiFailureFeedback(result.response);
-    };
-
-    const handleFinish = () => {
-        const data: NightReflectionData = {
-            feelings: "", // Legacy field
-            freeMemo: feelings, // Use rich text feelings as freeMemo
-            achievementAnalysis,
-            wastedTime,
-            extras: extrasInput ? [extrasInput] : [],
-            tomorrowIdeas
-        };
-        onSave(data, localTasks);
-    };
+    const toggleLocalTask = (index: number) => { const newTasks = [...localTasks]; newTasks[index].completed = !newTasks[index].completed; setLocalTasks(newTasks); };
+    const handleFailureAnalysis = async () => { setLoading(true); const result = await geminiService.analyzeFailureReason(failureReason, sideProjects); setLoading(false); setAiFailureFeedback(result.response); };
+    const handleAddExtra = () => { if(!extraInput.trim()) return; setExtrasList([...extrasList, extraInput]); setExtraInput(""); };
+    const handleRemoveExtra = (index: number) => { setExtrasList(extrasList.filter((_, i) => i !== index)); };
+    const handleFinish = () => { if(isSaving) return; setIsSaving(true); const data: NightReflectionData = { feelings: "", freeMemo: feelings, achievementAnalysis: "", wastedTime, extras: extrasList, tomorrowIdeas: "" }; onSave(data, localTasks); };
 
     const renderStep = () => {
-        // Step 1: Free Journaling (Essential)
         if (step === 1) {
             return (
-                <>
-                    <h2 className="text-xl font-bold mb-2 text-slate-800">夜のノート</h2>
-                    <p className="text-slate-600 mb-4">今日1日を振り返って、起きたことや感じたことを自由に書き出しましょう。</p>
-                    <RichTextEditor
-                        value={feelings}
-                        onChange={setFeelings}
-                        placeholder="今日はどんな1日だった？..."
-                        className="mb-6"
-                        minHeight="300px"
-                    />
-                    <PrimaryButton onClick={() => setStep(2)} disabled={!feelings} className="w-full">次へ</PrimaryButton>
-                </>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1">
+                        <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 h-full">
+                            <h3 className="font-bold text-sky-700 mb-3 flex items-center gap-2"><FileTextIcon className="w-5 h-5"/> 書くことの目安</h3>
+                            <ul className="space-y-3 text-sm text-slate-700">
+                                <li className="flex items-start gap-2"><span className="text-sky-400 font-bold">•</span><span>今どう思っているか</span></li>
+                                <li className="flex items-start gap-2"><span className="text-sky-400 font-bold">•</span><span><strong className="text-sky-600">今日の成果は何か</strong></span></li>
+                                <li className="flex items-start gap-2"><span className="text-sky-400 font-bold">•</span><span>一日を通して感謝している人はだれか</span></li>
+                                <li className="flex items-start gap-2"><span className="text-sky-400 font-bold">•</span><span>どんな気持ちで行動していたか</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div className="md:col-span-2">
+                        <h2 className="text-xl font-bold mb-2 text-slate-800">夜のノート</h2>
+                        <RichTextEditor value={feelings} onChange={setFeelings} placeholder="今日1日を振り返って..." className="mb-6" minHeight="300px" />
+                        <PrimaryButton onClick={() => setStep(2)} disabled={!feelings} className="w-full">次へ</PrimaryButton>
+                    </div>
+                </div>
             );
         }
-
-        // Step 2: Task Check & Failure Analysis
         if (step === 2) {
-             // If all done, skip to 3
-            if (uncompletedTasks.length === 0 && localTasks.length > 0) {
-                 return (
-                     <div className="text-center py-10">
-                         <h2 className="text-2xl font-bold text-sky-600 mb-4">素晴らしい！</h2>
-                         <p className="text-slate-600 mb-6">全てのタスクを完了しました。</p>
-                         <PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton>
-                     </div>
-                 )
-            }
-            if (localTasks.length === 0) {
-                 return (
-                    <div className="text-center py-10">
-                         <p className="text-slate-600 mb-6">タスクがありませんでした。</p>
-                         <PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton>
-                     </div>
-                 )
-            }
-
+            if (uncompletedTasks.length === 0 && localTasks.length > 0) return <div className="text-center py-10 animate-fade-in"><h2 className="text-2xl font-bold text-sky-600 mb-4">素晴らしい！</h2><p className="text-slate-600 mb-6">全てのタスクを完了しました。</p><PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton></div>
+            if (localTasks.length === 0) return <div className="text-center py-10 animate-fade-in"><p className="text-slate-600 mb-6">タスクがありませんでした。</p><PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton></div>
             return (
-                <>
+                <div className="max-w-2xl mx-auto animate-fade-in">
                     <h2 className="text-xl font-bold mb-4 text-slate-800">タスクの確認</h2>
-                    <div className="mb-6">
-                        {localTasks.map((task, idx) => (
-                             <div key={idx} className="flex items-center p-3 bg-white border border-slate-200 rounded-lg mb-2">
-                                <input 
-                                    type="checkbox" 
-                                    checked={task.completed} 
-                                    onChange={() => toggleLocalTask(idx)}
-                                    className="task-checkbox mr-3"
-                                />
-                                <span className={task.completed ? "line-through text-slate-400" : "text-slate-700"}>{task.text}</span>
-                             </div>
-                        ))}
-                    </div>
-                    
+                    <div className="mb-6">{localTasks.map((task, idx) => (<div key={idx} className="flex items-center p-3 bg-white border border-slate-200 rounded-lg mb-2"><input type="checkbox" checked={task.completed} onChange={() => toggleLocalTask(idx)} className="task-checkbox mr-3"/><span className={task.completed ? "line-through text-slate-400" : "text-slate-700"}>{task.text}</span></div>))}</div>
                     {uncompletedTasks.length > 0 && (
                         <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 animate-fade-in">
                             <h3 className="font-bold text-rose-600 mb-2">未達成のタスクがあります</h3>
                             <p className="text-sm text-slate-600 mb-3">なぜ達成できなかったのですか？言い訳せず、事実を述べてください。</p>
                             <TextArea value={failureReason} onChange={e => setFailureReason(e.target.value)} placeholder="理由..." className="mb-3" />
-                            
-                            {aiFailureFeedback && (
-                                <div className="bg-white p-3 rounded border border-rose-100 mb-3 text-slate-700 text-sm flex gap-2">
-                                     <BotIcon className="w-5 h-5 text-rose-500 shrink-0" />
-                                     {aiFailureFeedback}
-                                </div>
-                            )}
-
-                            {!aiFailureFeedback ? (
-                                <Button onClick={handleFailureAnalysis} disabled={!failureReason} className="w-full bg-rose-500 text-white hover:bg-rose-600">分析する</Button>
-                            ) : (
-                                <Button onClick={() => setStep(3)} className="w-full bg-slate-800 text-white hover:bg-slate-900">受け入れて次へ</Button>
-                            )}
+                            {aiFailureFeedback && <div className="bg-white p-3 rounded border border-rose-100 mb-3 text-slate-700 text-sm flex gap-2"><BotIcon className="w-5 h-5 text-rose-500 shrink-0" />{aiFailureFeedback}</div>}
+                            {!aiFailureFeedback ? <Button onClick={handleFailureAnalysis} disabled={!failureReason} className="w-full bg-rose-500 text-white hover:bg-rose-600">分析する</Button> : <Button onClick={() => setStep(3)} className="w-full bg-slate-800 text-white hover:bg-slate-900">受け入れて次へ</Button>}
                         </div>
                     )}
-                    
-                    {uncompletedTasks.length === 0 && (
-                         <PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton>
-                    )}
-                </>
+                    {uncompletedTasks.length === 0 && <PrimaryButton onClick={() => setStep(3)} className="w-full">次へ</PrimaryButton>}
+                </div>
             );
         }
-
-        // Step 3: Other Analysis
         if (step === 3) {
             return (
-                <>
-                    <h2 className="text-xl font-bold mb-4 text-slate-800">その他の振り返り</h2>
-                    
-                    <div className="space-y-4 mb-6">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 mb-1">成果・良かったこと</label>
-                            <TextArea value={achievementAnalysis} onChange={e => setAchievementAnalysis(e.target.value)} rows={2} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 mb-1">無駄にした時間 (分単位/内容)</label>
-                            <Input value={wastedTime} onChange={e => setWastedTime(e.target.value)} placeholder="例: SNSを見ていた30分" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 mb-1">予定外の努力 (+α)</label>
-                            <Input value={extrasInput} onChange={e => setExtrasInput(e.target.value)} placeholder="例: 関連書籍を1章読んだ" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 mb-1">明日のためのアイデア</label>
-                            <TextArea value={tomorrowIdeas} onChange={e => setTomorrowIdeas(e.target.value)} rows={2} />
+                 <div className="max-w-2xl mx-auto animate-fade-in text-center">
+                    <h2 className="text-xl font-bold mb-4 text-slate-800">時間の使い方</h2>
+                    <p className="text-slate-600 mb-6">今日、無駄にしてしまった時間はありますか？正直に記録しましょう。</p>
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6"><label className="block text-sm font-bold text-slate-600 mb-2 text-left">無駄にした時間 (分単位/内容)</label><Input value={wastedTime} onChange={e => setWastedTime(e.target.value)} placeholder="例: SNSを見ていた30分, 特になし" /></div>
+                    <div className="flex gap-4"><SecondaryButton onClick={() => setStep(2)} className="flex-1">戻る</SecondaryButton><PrimaryButton onClick={() => setStep(4)} className="flex-1">次へ</PrimaryButton></div>
+                 </div>
+            );
+        }
+        if (step === 4) {
+             return (
+                 <div className="max-w-2xl mx-auto animate-fade-in">
+                    <h2 className="text-xl font-bold mb-2 text-slate-800">プラスアルファの積み上げ</h2>
+                    <p className="text-slate-600 mb-6">予定にはなかったけれど、今日できたことはありますか？些細なことでも構いません。</p>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 mb-6">
+                         <div className="flex gap-2 mb-4"><Input value={extraInput} onChange={e => setExtraInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddExtra()} placeholder="例: 関連書籍を1章読んだ, スクワット10回" className="flex-1"/><button type="button" onClick={handleAddExtra} disabled={!extraInput.trim()} className="bg-emerald-500 text-white font-bold px-4 rounded-lg hover:bg-emerald-600 transition disabled:opacity-50">追加</button></div>
+                         {extrasList.length > 0 ? (<ul className="space-y-2">{extrasList.map((item, index) => (<li key={index} className="flex items-center justify-between bg-white p-3 rounded shadow-sm border border-emerald-100"><span className="text-emerald-800 font-medium">✨ {item}</span><button type="button" onClick={() => handleRemoveExtra(index)} className="text-slate-400 hover:text-rose-500 p-1">x</button></li>))}</ul>) : (<p className="text-emerald-600/50 text-center py-4 text-sm font-bold">まだ追加されていません</p>)}
+                    </div>
+                    <div className="flex gap-4"><SecondaryButton onClick={() => setStep(3)} className="flex-1">戻る</SecondaryButton><PrimaryButton onClick={() => setStep(5)} className="flex-1">次へ</PrimaryButton></div>
+                 </div>
+             );
+        }
+        if (step === 5) {
+            return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+                    <div className="md:col-span-1">
+                        <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 h-full">
+                            <h3 className="font-bold text-sky-700 mb-3 flex items-center gap-2"><FileTextIcon className="w-5 h-5"/> 書くことの目安</h3>
+                            <ul className="space-y-3 text-sm">
+                                <li className="flex items-start gap-2 text-slate-400"><span>•</span> <span>今どう思っているか</span></li>
+                                <li className="flex items-start gap-2 text-slate-400"><span>•</span> <span>今日の成果は何か</span></li>
+                                <li className="flex items-start gap-2 text-slate-400"><span>•</span> <span>一日を通して感謝している人はだれか</span></li>
+                                <li className="flex items-start gap-2 text-slate-400"><span>•</span> <span>どんな気持ちで行動していたか</span></li>
+                                <li className="flex items-start gap-2 text-sky-700 font-bold text-base mt-4 bg-white/50 p-2 rounded border border-sky-100 shadow-sm"><span className="text-sky-500">→</span><span>明日のアイデア</span></li>
+                            </ul>
+                            <p className="mt-4 text-xs text-slate-500">今日の振り返りを踏まえて、明日の計画やアイデアを書き足しましょう。</p>
                         </div>
                     </div>
-
-                    <PrimaryButton onClick={handleFinish} className="w-full">完了してスコアを確定</PrimaryButton>
-                </>
+                    <div className="md:col-span-2">
+                        <h2 className="text-xl font-bold mb-2 text-slate-800">夜のノート (仕上げ)</h2>
+                        <RichTextEditor value={feelings} onChange={setFeelings} placeholder="明日へのアイデアを追記..." className="mb-6" minHeight="300px" />
+                        <div className="flex gap-4"><SecondaryButton onClick={() => setStep(4)} className="flex-1">戻る</SecondaryButton><PrimaryButton onClick={handleFinish} disabled={isSaving} className="flex-1 py-4 text-lg shadow-xl">{isSaving ? "保存中..." : "完了してスコアを確定"}</PrimaryButton></div>
+                    </div>
+                </div>
             );
         }
     };
 
     return (
-        <Card className="max-w-2xl mx-auto">
+        <Card className={`mx-auto transition-all duration-300 ${step === 1 || step === 5 ? 'max-w-5xl' : 'max-w-2xl'}`}>
             <Header title="夜の振り返り" onBack={onBack} />
+            <div className="w-full bg-slate-200 rounded-full h-2 mb-8"><div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(step / 5) * 100}%` }}></div></div>
             {renderStep()}
         </Card>
     );
 };
 
 const AITwinView: React.FC<{ reflections: Reflection[], onBack: () => void }> = ({ reflections, onBack }) => {
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [history, setHistory] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const [twinReflection, setTwinReflection] = useState<Reflection | null>(null);
 
-    const selectedReflection = reflections.find(r => r.date === getLocalTodayDate(selectedDate));
+    useEffect(() => {
+        const valid = reflections.filter(r => r.morning && r.night && r.date !== getLocalTodayDate());
+        if (valid.length > 0) {
+            const target = valid[valid.length - 1];
+            setTwinReflection(target);
+            setHistory([{ role: 'model', text: `こんにちは。${target.date}の私です。あの日のことなら何でも聞いてください。` }]);
+        } else {
+             setHistory([{ role: 'model', text: "過去の記録が見つかりません。まずは日々の記録をつけましょう。" }]);
+        }
+    }, [reflections]);
 
-    const handleSendMessage = async () => {
-        if (!input.trim() || !selectedReflection) return;
-        
-        const newHistory = [...messages, { role: 'user' as const, text: input }];
-        setMessages(newHistory);
+    const handleSend = async () => {
+        if (!input.trim() || !twinReflection) return;
+        const newHistory: ChatMessage[] = [...history, { role: 'user', text: input }];
+        setHistory(newHistory);
         setInput("");
         setLoading(true);
-
-        const responseText = await geminiService.generateAITwinResponse(selectedReflection, newHistory);
-        
-        setMessages([...newHistory, { role: 'model' as const, text: responseText }]);
+        const response = await geminiService.generateAITwinResponse(twinReflection, newHistory);
+        setHistory([...newHistory, { role: 'model', text: response }]);
         setLoading(false);
     };
-    
-    useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [messages]);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-100px)]">
-            <div className="md:col-span-1">
-                 <Card className="h-full overflow-y-auto">
-                    <h2 className="font-bold text-slate-700 mb-4">日付を選択</h2>
-                    {/* Simplified Calendar for selection */}
-                    <input 
-                        type="date" 
-                        value={getLocalTodayDate(selectedDate)} 
-                        onChange={(e) => {
-                            const d = new Date(e.target.value);
-                            if(!isNaN(d.getTime())) setSelectedDate(d);
-                            setMessages([]);
-                        }}
-                        className="w-full p-2 border border-slate-300 rounded mb-4"
-                    />
-                    
-                    {selectedReflection ? (
-                        <div className="text-sm text-slate-600">
-                            <p><strong>朝のプラン:</strong> {selectedReflection.morning?.dailyPlan || "なし"}</p>
-                            <div className="my-2 border-t border-slate-200"></div>
-                             <p><strong>夜の記録:</strong></p>
-                             <div className="line-clamp-6 italic text-slate-500" dangerouslySetInnerHTML={{ __html: selectedReflection.night?.freeMemo || "記録なし" }} />
+        <Card className="max-w-2xl mx-auto h-[600px] flex flex-col">
+            <Header title="AI Twin (過去の自分)" onBack={onBack} />
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-xl mb-4 border border-slate-100">
+                {history.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex items-start max-w-[80%] gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-sky-500 text-white' : 'bg-purple-500 text-white'}`}>{msg.role === 'user' ? <UsersIcon className="w-5 h-5"/> : <GhostIcon className="w-5 h-5"/>}</div>
+                            <div className={`p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-sky-500 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>{msg.text}</div>
                         </div>
-                    ) : (
-                        <p className="text-slate-400 text-sm">この日の記録はありません。</p>
-                    )}
-                 </Card>
-            </div>
-            
-            <div className="md:col-span-2 flex flex-col h-full">
-                <Card className="flex-1 flex flex-col h-full relative">
-                     <Header title="AI Twin" onBack={onBack} />
-                     {!selectedReflection && <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center text-slate-400 font-bold">記録のある日付を選択してください</div>}
-                     
-                     <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2" ref={scrollRef}>
-                        {messages.length === 0 && (
-                            <div className="text-center text-slate-400 mt-10">
-                                <GhostIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>過去の自分と対話してみましょう</p>
-                            </div>
-                        )}
-                        {messages.map((msg, i) => (
-                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] p-3 rounded-xl ${msg.role === 'user' ? 'bg-sky-500 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-bl-none'}`}>
-                                    {msg.text}
-                                </div>
-                            </div>
-                        ))}
-                        {loading && (
-                             <div className="flex justify-start">
-                                <div className="bg-slate-100 p-3 rounded-xl rounded-bl-none text-slate-400 text-sm animate-pulse">
-                                    入力中...
-                                </div>
-                            </div>
-                        )}
-                     </div>
-
-                     <div className="flex gap-2">
-                        <Input 
-                            value={input} 
-                            onChange={(e) => setInput(e.target.value)} 
-                            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                            placeholder="メッセージを入力..." 
-                            className="flex-1"
-                        />
-                        <button onClick={handleSendMessage} disabled={loading || !input} className="bg-sky-500 text-white p-3 rounded-lg hover:bg-sky-600 transition disabled:opacity-50">
-                            <SendIcon className="w-5 h-5" />
-                        </button>
-                     </div>
-                </Card>
-            </div>
-        </div>
-    );
-};
-
-const SpicyFeedbackView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-    // Prototype: Fixed messages
-    const messages = [
-        { text: "めっちゃ頑張ってるじゃん。たぶん行けるよ", type: 'positive' },
-        { text: "私も頑張らないと", type: 'neutral' },
-        { text: "最近ちょっと下がってきてない？大丈夫？", type: 'worry' },
-        { text: "もしよければ相談乗るよ？", type: 'support' }
-    ];
-
-    const handleConsult = (msg: string) => {
-        alert(`「${msg}」と言ってくれた仲間に相談リクエストを送りました（プロトタイプ）`);
-    };
-
-    return (
-        <Card className="max-w-2xl mx-auto min-h-[500px]">
-            <Header title="仲間からのフィードバック" onBack={onBack} />
-            <div className="space-y-6 mt-8">
-                {messages.map((m, i) => (
-                    <div key={i} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm gap-4 transition hover:shadow-md">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center shrink-0">
-                                <UserIcon className="w-6 h-6 text-slate-500" />
-                            </div>
-                            <div className="relative bg-slate-50 p-3 rounded-lg rounded-tl-none border border-slate-100">
-                                <p className="text-slate-700 font-medium">"{m.text}"</p>
-                            </div>
-                        </div>
-                        <Button onClick={() => handleConsult(m.text)} className="bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 whitespace-nowrap text-sm">
-                            この人に相談する
-                        </Button>
                     </div>
                 ))}
+                {loading && <div className="text-center text-xs text-slate-400 animate-pulse">考え中...</div>}
             </div>
-            
-            <div className="mt-12 text-center text-slate-400 text-sm">
-                <p>※ これはプロトタイプ版です。実際の仲間からのメッセージが表示されます。</p>
+            <div className="flex gap-2">
+                <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} placeholder="メッセージを入力..." disabled={!twinReflection} />
+                <PrimaryButton onClick={handleSend} disabled={!input || !twinReflection} className="px-4"><SendIcon className="w-5 h-5"/></PrimaryButton>
             </div>
         </Card>
     );
 };
 
-const SideProjectsView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
-    <Card className="max-w-4xl mx-auto h-[600px] flex flex-col items-center justify-center">
-        <Header title="サイドプロジェクト" onBack={onBack} />
-        <BrainCircuitIcon className="w-24 h-24 text-slate-200 mb-4" />
-        <p className="text-slate-500">この機能は現在開発中です。</p>
-    </Card>
-);
+const SideProjectsView: React.FC<{ onBack: () => void, settings: UserSettings, onUpdateSettings: (s: UserSettings) => void }> = ({ onBack, settings, onUpdateSettings }) => {
+    const [projects, setProjects] = useState<SideProject[]>(settings.sideProjects || []);
+    const [name, setName] = useState("");
+    const [dueDate, setDueDate] = useState("");
+    const handleAdd = () => { if(!name) return; const newProject: SideProject = { id: Date.now().toString(), name, dueDate, completed: false }; const updated = [...projects, newProject]; setProjects(updated); onUpdateSettings({ ...settings, sideProjects: updated }); setName(""); setDueDate(""); };
+    const toggleComplete = (id: string) => { const updated = projects.map(p => p.id === id ? { ...p, completed: !p.completed } : p); setProjects(updated); onUpdateSettings({ ...settings, sideProjects: updated }); };
+    const deleteProject = (id: string) => { const updated = projects.filter(p => p.id !== id); setProjects(updated); onUpdateSettings({ ...settings, sideProjects: updated }); }
+    return (
+        <Card>
+            <Header title="サイドプロジェクト" onBack={onBack} />
+            <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200"><h3 className="font-bold text-slate-700 mb-2">新規プロジェクト</h3><div className="flex gap-2 mb-2"><Input value={name} onChange={e => setName(e.target.value)} placeholder="プロジェクト名" className="flex-1" /><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-40" /></div><PrimaryButton onClick={handleAdd} disabled={!name}>追加</PrimaryButton></div>
+            <div className="space-y-3">{projects.map(p => (<div key={p.id} className={`flex items-center justify-between p-4 rounded-lg border ${p.completed ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-200 shadow-sm'}`}><div className="flex items-center gap-3"><input type="checkbox" checked={p.completed} onChange={() => toggleComplete(p.id)} className="w-5 h-5 accent-sky-500" /><div><p className={`font-bold ${p.completed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{p.name}</p>{p.dueDate && <p className="text-xs text-slate-500">期限: {p.dueDate}</p>}</div></div><button type="button" onClick={() => deleteProject(p.id)} className="text-slate-400 hover:text-rose-500">x</button></div>))}</div>
+        </Card>
+    );
+};
 
-const MemoPadView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
-    <Card className="max-w-4xl mx-auto h-[600px] flex flex-col items-center justify-center">
-        <Header title="メモ帳" onBack={onBack} />
-        <FileTextIcon className="w-24 h-24 text-slate-200 mb-4" />
-        <p className="text-slate-500">この機能は現在開発中です。</p>
-    </Card>
-);
+const MemoPadView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+    const [memos, setMemos] = useState<Memo[]>([]);
+    const [text, setText] = useState("");
+    useEffect(() => { const saved = localStorage.getItem('comit_memos'); if (saved) setMemos(JSON.parse(saved)); }, []);
+    const saveMemos = (newMemos: Memo[]) => { setMemos(newMemos); localStorage.setItem('comit_memos', JSON.stringify(newMemos)); };
+    const addMemo = () => { if (!text.trim()) return; const newMemo: Memo = { id: Date.now().toString(), text, createdAt: new Date().toISOString() }; saveMemos([newMemo, ...memos]); setText(""); };
+    const deleteMemo = (id: string) => { saveMemos(memos.filter(m => m.id !== id)); };
+    return (
+        <Card>
+            <Header title="メモパッド" onBack={onBack} />
+            <div className="mb-6"><TextArea value={text} onChange={e => setText(e.target.value)} placeholder="何か思いつきましたか？" className="mb-2" /><PrimaryButton onClick={addMemo} disabled={!text.trim()} className="w-full">メモを追加</PrimaryButton></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{memos.map(memo => (<div key={memo.id} className="bg-yellow-50 p-4 rounded shadow-sm border border-yellow-200 relative group"><p className="whitespace-pre-wrap text-slate-700 text-sm mb-4">{memo.text}</p><div className="flex justify-between items-center mt-2 border-t border-yellow-100 pt-2"><span className="text-xs text-slate-400">{new Date(memo.createdAt).toLocaleDateString()}</span><button type="button" onClick={() => deleteMemo(memo.id)} className="text-slate-400 hover:text-rose-500">削除</button></div></div>))}</div>
+        </Card>
+    );
+}
 
-const PeerProfileView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const SpicyFeedbackView: React.FC<{ onBack: () => void, reflections: Reflection[] }> = ({ onBack, reflections }) => {
+    const [feedback, setFeedback] = useState("");
+    const [loading, setLoading] = useState(false);
+    useEffect(() => {
+        const fetchFeedback = async () => {
+            setLoading(true);
+            const recentScores = reflections.slice(-5).map(r => r.score || 0);
+            const text = await geminiService.generateSpicyFeedback(recentScores);
+            setFeedback(text);
+            setLoading(false);
+        };
+        fetchFeedback();
+    }, [reflections]);
+    return (
+        <Card><Header title="辛口フィードバック" onBack={onBack} /><div className="flex flex-col items-center justify-center py-10"><div className="bg-slate-800 text-white p-6 rounded-xl shadow-2xl max-w-lg w-full relative"><div className="absolute -top-4 -left-4 bg-red-500 text-white font-bold px-3 py-1 rounded shadow-lg transform -rotate-12">Spicy!</div>{loading ? <p className="animate-pulse">Loading...</p> : <p className="text-lg font-bold leading-relaxed">"{feedback}"</p>}<div className="mt-4 text-right text-slate-400 text-xs">- Your Peer (AI)</div></div></div></Card>
+    );
+};
+
+const GoalRenewalView: React.FC<{
+    settings: UserSettings;
+    reflections: Reflection[];
+    onSave: (goal: string) => void;
+    setLoading: (l: boolean) => void;
+}> = ({ settings, reflections, onSave, setLoading }) => {
+    const [review, setReview] = useState("");
+    const [suggestedGoal, setSuggestedGoal] = useState("");
+    const [step, setStep] = useState(1);
+    const handleAnalyze = async () => { setLoading(true); const totalScore = reflections.reduce((acc, r) => acc + (r.score || 0), 0); const nextGoal = await geminiService.generateNextGoal(settings.longTermGoal, review, totalScore); setSuggestedGoal(nextGoal); setLoading(false); setStep(2); };
     return (
         <Card className="max-w-2xl mx-auto">
-            <Header title="仲間のプロフィール" onBack={onBack} />
-            <div className="flex flex-col items-center mb-8">
-                <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center mb-4">
-                    <UserIcon className="w-12 h-12 text-slate-400" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-800">Yamada Taro</h2>
-                <p className="text-slate-500">Web Engineer Goal: Full Stack Master</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 mb-8">
-                 <div className="bg-slate-50 p-4 rounded-lg text-center">
-                     <p className="text-xs text-slate-500 uppercase font-bold">Current Streak</p>
-                     <p className="text-2xl font-bold text-sky-600">42 Days</p>
-                 </div>
-                 <div className="bg-slate-50 p-4 rounded-lg text-center">
-                     <p className="text-xs text-slate-500 uppercase font-bold">Total Score</p>
-                     <p className="text-2xl font-bold text-amber-500">1250</p>
-                 </div>
-            </div>
-
-            <div className="space-y-3">
-                <Button onClick={() => {}} className="w-full bg-sky-500 text-white flex items-center justify-center gap-2">
-                    <VideoIcon className="w-5 h-5" />
-                    メンタリングを申し込む
-                </Button>
-                <Button onClick={() => {}} className="w-full bg-white border border-slate-300 text-slate-700 flex items-center justify-center gap-2">
-                    <MessageSquareIcon className="w-5 h-5" />
-                    メッセージを送る
-                </Button>
-            </div>
+            <div className="text-center mb-6"><h1 className="text-2xl font-bold text-sky-600 mb-2">3週間のサイクルが終了しました！</h1><p className="text-slate-600">お疲れ様でした。この3週間を振り返り、次のステップへ進みましょう。</p></div>
+            {step === 1 && (<div className="animate-fade-in"><p className="font-bold text-slate-700 mb-2">これまでの振り返り</p><TextArea value={review} onChange={e => setReview(e.target.value)} placeholder="達成できたこと、難しかったこと、今の気持ちなどを自由に書いてください。" className="mb-4 h-32"/><PrimaryButton onClick={handleAnalyze} disabled={!review} className="w-full">AIと次のゴールを決める</PrimaryButton></div>)}
+            {step === 2 && (<div className="animate-fade-in"><h3 className="font-bold text-lg text-slate-800 mb-4">次の3週間ゴール（提案）</h3><TextArea value={suggestedGoal} onChange={e => setSuggestedGoal(e.target.value)} className="mb-6 text-lg font-bold text-slate-800"/><PrimaryButton onClick={() => onSave(suggestedGoal)} className="w-full">新しいサイクルを開始する</PrimaryButton></div>)}
         </Card>
     );
 };
 
-// --- Main App Component ---
-
 const App: React.FC = () => {
-    const [view, setView] = useState<AppView>('SETUP');
+    const [initializing, setInitializing] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [view, setView] = useState<AppView>('DASHBOARD');
     const [settings, setSettings] = useState<UserSettings | null>(null);
     const [reflections, setReflections] = useState<Reflection[]>([]);
     const [today, setToday] = useState(getLocalTodayDate());
-    const [loading, setLoading] = useState(false);
-    
-    // Modal State
-    const [showMentoringModal, setShowMentoringModal] = useState(false);
-    const [showProtoModal, setShowProtoModal] = useState(true);
 
-    // Initial Load
     useEffect(() => {
         const savedSettings = localStorage.getItem('comit_settings');
         const savedReflections = localStorage.getItem('comit_reflections');
+        let loadedSettings: UserSettings | null = null;
         
         if (savedSettings) {
-            setSettings(JSON.parse(savedSettings));
-            setView('DASHBOARD');
+            loadedSettings = migrateSettings(JSON.parse(savedSettings));
+            setSettings(loadedSettings);
+            if (loadedSettings.commitmentStartDate) {
+                const daysDiff = getDaysDiff(loadedSettings.commitmentStartDate, getLocalTodayDate());
+                if (daysDiff >= 21) setView('GOAL_RENEWAL');
+            }
         }
-        if (savedReflections) {
-            setReflections(JSON.parse(savedReflections));
-        }
-
-        // Keep date updated
-        const timer = setInterval(() => {
-            setToday(getLocalTodayDate());
-        }, 60000);
-        return () => clearInterval(timer);
+        if (savedReflections) setReflections(migrateReflections(JSON.parse(savedReflections)));
+        
+        setInitializing(false);
     }, []);
 
-    // Helper to persist reflections immediately
-    const persistReflections = (newReflections: Reflection[]) => {
-        setReflections(newReflections);
-        localStorage.setItem('comit_reflections', JSON.stringify(newReflections));
-    };
+    const saveSettings = (newSettings: UserSettings) => { setSettings(newSettings); localStorage.setItem('comit_settings', JSON.stringify(newSettings)); };
+    const saveReflections = (newReflections: Reflection[]) => { setReflections(newReflections); localStorage.setItem('comit_reflections', JSON.stringify(newReflections)); };
 
-    const handleSetupSave = (newSettings: UserSettings) => {
-        setSettings(newSettings);
-        localStorage.setItem('comit_settings', JSON.stringify(newSettings));
-        setView('DEPOSIT');
-    };
+    const handleSetupSave = (newSettings: UserSettings) => { saveSettings(newSettings); setView('DEPOSIT'); };
+    const handleGoalRenewal = (newGoal: string) => { if (!settings) return; const updated = { ...settings, threeWeekGoal: newGoal, commitmentStartDate: today }; saveSettings(updated); setView('DASHBOARD'); };
+    const handleUpdateSettings = (newSettings: UserSettings) => saveSettings(newSettings);
+    const handleRegisterPrototyper = () => { if (!settings) return; saveSettings({ ...settings, isPrototyperRegistered: true }); };
 
-    const handleDepositSave = (amount: number) => {
-        if (!settings) return;
-        const updatedSettings = { ...settings, depositAmount: amount };
-        setSettings(updatedSettings);
-        localStorage.setItem('comit_settings', JSON.stringify(updatedSettings));
-        setView('DASHBOARD');
-    };
-
-    const handleSaveMorning = (data: MorningReflectionData, tasks: DailyTask[], penaltyScore: number = 0) => {
-        // Find existing reflection or create new
-        const existingIndex = reflections.findIndex(r => r.date === today);
-        let newReflections = [...reflections];
-        
-        const newReflection: Reflection = existingIndex >= 0 ? {
-            ...newReflections[existingIndex],
-            morning: data,
-            dailyTasks: tasks,
-            pendingScore: penaltyScore !== 0 ? -Math.abs(penaltyScore) : 0 
-        } : {
-            date: today,
-            morning: data,
-            dailyTasks: tasks,
-            score: 0,
-            pendingScore: penaltyScore !== 0 ? -Math.abs(penaltyScore) : 0 
-        };
-
-        if (existingIndex >= 0) {
-            newReflections[existingIndex] = newReflection;
-        } else {
-            newReflections.push(newReflection);
-        }
-
-        persistReflections(newReflections);
-        setView('DASHBOARD');
-
-        // Check for mentoring popup trigger
-        // Logic: If yesterday's score was negative AND last mentoring was > 3 days ago (or never)
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = getLocalTodayDate(yesterday);
-        const yesterdayReflection = reflections.find(r => r.date === yesterdayStr);
-
-        const lastMentoring = settings?.lastMentoringDate ? new Date(settings.lastMentoringDate) : null;
-        const daysSinceMentoring = lastMentoring ? (new Date().getTime() - lastMentoring.getTime()) / (1000 * 3600 * 24) : 999;
-
-        // Condition: Yesterday negative score OR currently carrying a penalty for today
-        if ((yesterdayReflection?.score && yesterdayReflection.score < 0) || penaltyScore > 0) {
-            if (daysSinceMentoring >= 3) {
-                 setTimeout(() => setShowMentoringModal(true), 500);
-            }
-        }
-    };
-
-    const handleSaveNight = (data: NightReflectionData, updatedTasks: DailyTask[]) => {
-        const existingIndex = reflections.findIndex(r => r.date === today);
-        if (existingIndex === -1) return; // Should not happen flow-wise
-
-        let newReflections = [...reflections];
-        const reflection = newReflections[existingIndex];
-        
-        // Calculate Score
-        // Basic rule: Main task complete = +50. Sub tasks = +10 each.
-        // Penalty from morning applies.
-        // Extras = +5 each.
-        // Wasted time = -1 per 10 mins? (Simplified: -10 flat if wasted time exists)
-        
-        let score = reflection.pendingScore || 0;
-        
-        updatedTasks.forEach(t => {
-            if (t.completed) {
-                score += t.type === 'main' ? 50 : 10;
-            } else {
-                score -= 10; // Penalty for incomplete
-            }
-        });
-
-        if (data.extras.length > 0) score += (data.extras.length * 5);
-        if (data.wastedTime) score -= 10;
-
-        const updatedReflection: Reflection = {
-            ...reflection,
-            night: data,
-            dailyTasks: updatedTasks,
-            score: score,
-            pendingScore: 0
-        };
-
-        newReflections[existingIndex] = updatedReflection;
-        persistReflections(newReflections);
-        setView('DASHBOARD');
-    };
-
-    const handleUpdateTasks = (tasks: DailyTask[]) => {
-        const existingIndex = reflections.findIndex(r => r.date === today);
-        if (existingIndex === -1) return;
-        
-        let newReflections = [...reflections];
-        newReflections[existingIndex] = {
-            ...newReflections[existingIndex],
-            dailyTasks: tasks
-        };
-        persistReflections(newReflections);
-    };
-
-    const handleMentoringSelect = (targetView: AppView) => {
-        setShowMentoringModal(false);
-        // Update lastMentoringDate
-        if(settings) {
-            const newSettings = { ...settings, lastMentoringDate: new Date().toISOString() };
-            setSettings(newSettings);
-            localStorage.setItem('comit_settings', JSON.stringify(newSettings));
-        }
-        setView(targetView);
-    };
-
-    // Calculate Dashboard Stats
+    const todayStr = getLocalTodayDate();
+    const currentReflection = reflections.find(r => r.date === todayStr);
     const totalScore = reflections.reduce((acc, r) => acc + (r.score || 0), 0);
-    // Simple streak calculation (consecutive days with score > 0)
-    // This is a naive implementation for the prototype
-    const currentStreak = reflections.filter(r => (r.score || 0) > 0).length;
+    const currentStreak = reflections.length; 
 
-    const getCurrentQuarterGoal = () => {
-        if (!settings) return "";
-        // Logic to determine which quarter we are in relative to start date
-        // For prototype, just return the first one or based on month
-        return settings.quarterlyGoals[0];
-    };
+    if (initializing) return <LoadingSpinner />;
 
-    const currentReflection = reflections.find(r => r.date === today);
+    const renderContent = () => {
+        if (!settings) {
+            return (
+                <div className="min-h-screen bg-slate-100 p-4 flex items-center justify-center">
+                    <SetupView onSave={handleSetupSave} setLoading={setLoading} />
+                </div>
+            );
+        }
 
-    // Development Trigger
-    const triggerMentoringPopup = () => {
-        setShowMentoringModal(true);
+        if (!settings.depositAmount && view === 'DEPOSIT') {
+            return (
+                <div className="min-h-screen bg-slate-100 p-4 flex items-center justify-center">
+                    <DepositView onSave={(amount) => { saveSettings({ ...settings, depositAmount: amount }); setView('DASHBOARD'); }} />
+                </div>
+            );
+        }
+
+        return (
+            <div className="min-h-screen bg-slate-100 text-slate-800 font-sans selection:bg-sky-200">
+                 <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-sky-100 via-slate-100 to-slate-200"></div>
+                 <Clock />
+                 <div className="container mx-auto p-4 md:p-8 max-w-6xl">
+                    {view === 'DASHBOARD' && (
+                        <DashboardView 
+                            settings={settings}
+                            reflections={reflections}
+                            totalScore={totalScore}
+                            currentStreak={currentStreak}
+                            currentQuarterlyGoal={settings.threeWeekGoal || ""}
+                            todayStr={todayStr}
+                            currentReflection={currentReflection}
+                            onNavigate={setView}
+                            onUpdateTasks={(tasks) => {
+                                if (!currentReflection) return;
+                                const updated = { ...currentReflection, dailyTasks: tasks };
+                                const others = reflections.filter(r => r.date !== todayStr);
+                                saveReflections([...others, updated]);
+                            }}
+                        />
+                    )}
+                    {view === 'MORNING_CONVERSATION' && (
+                        <MorningConversationView 
+                            quarterlyGoal={settings.threeWeekGoal || ""}
+                            longTermGoal={settings.longTermGoal}
+                            onSave={(data, tasks, penalty) => {
+                                 const newReflection: Reflection = currentReflection 
+                                    ? { ...currentReflection, morning: data, dailyTasks: tasks, pendingScore: penalty ? -penalty : 0 }
+                                    : { date: todayStr, morning: data, dailyTasks: tasks, score: 0, pendingScore: penalty ? -penalty : 0 };
+                                 const others = reflections.filter(r => r.date !== todayStr);
+                                 saveReflections([...others, newReflection]);
+                                 setView('DASHBOARD');
+                            }}
+                            onBack={() => setView('DASHBOARD')}
+                            setLoading={setLoading}
+                        />
+                    )}
+                    {view === 'NIGHT_REFLECTION' && currentReflection && (
+                        <NightReflectionView 
+                            tasks={currentReflection.dailyTasks || []}
+                            sideProjects={settings.sideProjects}
+                            onSave={(data, updatedTasks) => {
+                                 let score = 10 + (updatedTasks.filter(t => t.completed).length * 5) + (data.extras.length * 5);
+                                 if (data.wastedTime) score -= 10;
+                                 if (currentReflection.pendingScore) score += currentReflection.pendingScore;
+                                 const updated: Reflection = { ...currentReflection, night: data, dailyTasks: updatedTasks, score: score, pendingScore: 0 };
+                                 const others = reflections.filter(r => r.date !== todayStr);
+                                 saveReflections([...others, updated]);
+                                 setView('DASHBOARD');
+                            }}
+                            onBack={() => setView('DASHBOARD')}
+                            setLoading={setLoading}
+                        />
+                    )}
+                    {view === 'AI_TWIN' && <AITwinView reflections={reflections} onBack={() => setView('DASHBOARD')} />}
+                    {view === 'SPICY_FEEDBACK' && <SpicyFeedbackView reflections={reflections} onBack={() => setView('DASHBOARD')} />}
+                    {view === 'SIDE_PROJECTS' && <SideProjectsView settings={settings} onBack={() => setView('DASHBOARD')} onUpdateSettings={handleUpdateSettings} />}
+                    {view === 'MEMO_PAD' && <MemoPadView onBack={() => setView('DASHBOARD')} />}
+                    {view === 'GOAL_RENEWAL' && <GoalRenewalView settings={settings} reflections={reflections} onSave={handleGoalRenewal} setLoading={setLoading} />}
+                 </div>
+            </div>
+        );
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-sky-200">
-             {/* Background Decoration */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-                <div className="absolute -top-[20%] -right-[10%] w-[50%] h-[50%] bg-sky-200/20 rounded-full blur-3xl"></div>
-                <div className="absolute top-[40%] -left-[10%] w-[40%] h-[40%] bg-emerald-200/20 rounded-full blur-3xl"></div>
-                <div className="absolute -bottom-[10%] right-[20%] w-[30%] h-[30%] bg-purple-200/20 rounded-full blur-3xl"></div>
-            </div>
-
-            <Clock />
-            <PrototypeBanner />
-
-            {loading && (
-                <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
-                    <LoadingSpinner />
-                </div>
-            )}
-
-            <MentoringModal isOpen={showMentoringModal} onSelect={handleMentoringSelect} />
-            {showProtoModal && <PrototypeModal onClose={() => setShowProtoModal(false)} />}
-
-            <main className="container mx-auto max-w-5xl px-4 py-8 relative">
-                {/* Dev Trigger Button */}
-                {view === 'DASHBOARD' && (
-                    <button 
-                        onClick={triggerMentoringPopup}
-                        className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-50 hover:opacity-100 transition z-50"
-                    >
-                        🔔 ポップアップを表示
-                    </button>
-                )}
-
-                {view === 'SETUP' && (
-                    <SetupView onSave={handleSetupSave} setLoading={setLoading} />
-                )}
-                {view === 'DEPOSIT' && (
-                    <DepositView onSave={handleDepositSave} />
-                )}
-                {view === 'DASHBOARD' && settings && (
-                    <DashboardView
-                        settings={settings}
-                        reflections={reflections}
-                        totalScore={totalScore}
-                        currentStreak={currentStreak}
-                        currentQuarterlyGoal={getCurrentQuarterGoal()}
-                        todayStr={today}
-                        currentReflection={currentReflection}
-                        onNavigate={setView}
-                        onUpdateTasks={handleUpdateTasks}
-                    />
-                )}
-                {view === 'MORNING_CONVERSATION' && settings && (
-                    <MorningConversationView
-                        quarterlyGoal={getCurrentQuarterGoal()}
-                        longTermGoal={settings.longTermGoal}
-                        onSave={handleSaveMorning}
-                        onBack={() => setView('DASHBOARD')}
-                        setLoading={setLoading}
-                    />
-                )}
-                {view === 'NIGHT_REFLECTION' && currentReflection && (
-                    <NightReflectionView
-                        tasks={currentReflection.dailyTasks || []}
-                        sideProjects={settings?.sideProjects}
-                        onSave={handleSaveNight}
-                        onBack={() => setView('DASHBOARD')}
-                        setLoading={setLoading}
-                    />
-                )}
-                {view === 'AI_TWIN' && (
-                    <AITwinView reflections={reflections} onBack={() => setView('DASHBOARD')} />
-                )}
-                {view === 'SPICY_FEEDBACK' && (
-                    <SpicyFeedbackView onBack={() => setView('DASHBOARD')} />
-                )}
-                {view === 'SIDE_PROJECTS' && (
-                    <SideProjectsView onBack={() => setView('DASHBOARD')} />
-                )}
-                {view === 'MEMO_PAD' && (
-                    <MemoPadView onBack={() => setView('DASHBOARD')} />
-                )}
-                {view === 'PEER_PROFILE' && (
-                    <PeerProfileView onBack={() => setView('DASHBOARD')} />
-                )}
-            </main>
-        </div>
+        <>
+            {loading && <LoadingOverlay />}
+            {settings && !settings.isPrototyperRegistered && <PrototypeRegistrationModal onRegister={handleRegisterPrototyper} />}
+            {renderContent()}
+        </>
     );
 };
 

@@ -9,7 +9,8 @@ export interface SideProject {
 export interface UserSettings {
   yearStartMonth: number; // 0-11 for Jan-Dec
   longTermGoal: string;
-  quarterlyGoals: [string, string, string, string];
+  quarterlyGoals?: [string, string, string, string]; // Deprecated but kept for type safety if needed temporarily
+  threeWeekGoal?: string; // New: 3-week ideal vision
   commitmentStartDate: string; // YYYY-MM-DD
   goalDurationDays: number;
   depositAmount: number;
@@ -17,6 +18,7 @@ export interface UserSettings {
   firstSuccessAchieved?: boolean;
   lastAITwinSessionDate?: string;
   lastMentoringDate?: string; // For controlling pop-up frequency
+  isPrototyperRegistered?: boolean; // New: Hides prototype modal/banner
 }
 
 export interface MorningReflectionData {
@@ -57,7 +59,7 @@ export interface RoadSegment {
   score: number;
 }
 
-export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE';
+export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE' | 'GOAL_RENEWAL';
 
 export interface AITwin {
   date: string;

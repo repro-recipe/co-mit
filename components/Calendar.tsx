@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Reflection, UserSettings } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
@@ -55,13 +56,13 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
   return (
     <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6">
       <div className="flex justify-between items-center mb-4">
-        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
+        <button type="button" onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
           <ChevronLeftIcon className="w-6 h-6" />
         </button>
         <h3 className="text-xl font-bold text-sky-600">
           {year}年 {month + 1}月
         </h3>
-        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
+        <button type="button" onClick={handleNextMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
           <ChevronRightIcon className="w-6 h-6" />
         </button>
       </div>
@@ -83,6 +84,7 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
 
           return (
             <button
+              type="button"
               key={day}
               onClick={() => reflection && onDayClick(reflection)}
               disabled={!reflection}
