@@ -11,6 +11,8 @@ export interface UserSettings {
   longTermGoal: string;
   quarterlyGoals?: [string, string, string, string]; // Deprecated but kept for type safety if needed temporarily
   threeWeekGoal?: string; // New: 3-week ideal vision
+  threeWeekGoalDeadline?: string; // New: The specific date the 3-week goal ends
+  visionBoardImage?: string; // New: Base64 string of the generated vision board
   commitmentStartDate: string; // YYYY-MM-DD
   goalDurationDays: number;
   depositAmount: number;
@@ -59,7 +61,7 @@ export interface RoadSegment {
   score: number;
 }
 
-export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE' | 'GOAL_RENEWAL';
+export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE' | 'GOAL_RENEWAL' | 'SETTINGS' | 'JOURNAL_LOG' | 'VISION_BOARD_CREATION';
 
 export interface AITwin {
   date: string;

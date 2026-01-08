@@ -252,7 +252,7 @@ export const evaluateTask = async (task: string, longTermGoal: string, quarterly
     if (isFirstTask) {
         strictnessInstruction = `
         This is the user's PRIMARY task for the day. Be STRICT.
-        If the task is too easy, vague, or irrelevant (e.g., "think about it", "check email"), judgment = "insufficient".
+        If the task is too easy, vague, or irrelevant (e.g. "think about it", "check email"), judgment = "insufficient".
         "insufficient" response should be critical, asking them to aim higher.
         `;
     } else {
@@ -574,5 +574,72 @@ export const generateNextGoal = async (longTermGoal: string, review: string, sco
     } catch (error) {
         console.error("Error generating next goal:", error);
         return "新しいスキルを習得して実践する";
+    }
+};
+
+// --- Vision Board Generation ---
+
+const createImagePromptFromChat = async (history: ChatMessage[], longTermGoal: string): Promise<string> => {
+    const contentText = history.map(m => `${m.role}: ${m.text}`).join('\n');
+    const prompt = `
+        Based on the user's "3-Week Vision" detailed in the conversation below, create a detailed English image prompt for an AI image generator.
+        
+        Context: The user wants a "Vision Board" image that represents their ideal self 3 weeks from now.
+        Annual Goal: "${longTermGoal}"
+        
+        Conversation:
+        ${contentText}
+
+        Instructions:
+        1. Extract visual details: Location, lighting, objects, user's appearance/expression, atmosphere.
+        2. Style: Digital art, inspiring, vibrant, high quality, cinematic lighting.
+        3. Output: A single paragraph English description suitable for text-to-image models. Do not include introductory text.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error creating image prompt:", error);
+        return "A successful person working happily in a bright modern office, digital art style.";
+    }
+};
+
+export const generateVisionBoardImage = async (history: ChatMessage[], longTermGoal: string): Promise<string | null> => {
+    try {
+        // 1. Convert chat history to a visual description prompt (English)
+        const imagePrompt = await createImagePromptFromChat(history, longTermGoal);
+        console.log("Generated Image Prompt:", imagePrompt);
+
+        // 2. Generate Image using Gemini 2.5 Flash Image (Nano Banana)
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [{ text: imagePrompt }],
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: "16:9",
+                }
+            }
+        });
+
+        // 3. Extract base64 image
+        // Iterate through parts to find inlineData as per guidelines
+        if (response.candidates && response.candidates[0].content && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData && part.inlineData.data) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
+            }
+        }
+        return null;
+
+    } catch (error) {
+        console.error("Error generating vision board image:", error);
+        return null;
     }
 };

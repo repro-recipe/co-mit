@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserSettings, Reflection, DailyTask, AppView, ChatMessage, MorningReflectionData, NightReflectionData, SideProject, Memo } from './types';
 import * as geminiService from './services/geminiService';
-import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon } from './components/Icons';
+import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon, SettingsIcon, CalendarIcon, ImageIcon } from './components/Icons';
 import GrowthGraph from './components/GrowthGraph';
 import RichTextEditor from './components/RichTextEditor';
+import Calendar from './components/Calendar';
+import CommitmentRoad from './components/Road';
 
 // --- Helpers ---
 
@@ -13,6 +15,15 @@ const getLocalTodayDate = (date: Date = new Date()): string => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const addDays = (dateStr: string, days: number): string => {
+    const date = new Date(dateStr);
+    date.setDate(date.getDate() + days);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 };
 
 const getDaysDiff = (date1Str: string, date2Str: string): number => {
@@ -29,6 +40,9 @@ const migrateSettings = (settings: any): UserSettings => {
         commitmentStartDate: settings.commitmentStartDate || today,
         threeWeekGoal: settings.threeWeekGoal || (settings.quarterlyGoals && settings.quarterlyGoals.length > 0 ? settings.quarterlyGoals[0] : ""),
         isPrototyperRegistered: settings.isPrototyperRegistered ?? false,
+        // Default to 2026-01-21 if no deadline exists (Requested by user for legacy data)
+        threeWeekGoalDeadline: settings.threeWeekGoalDeadline || "2026-01-21",
+        visionBoardImage: settings.visionBoardImage, // Ensure this is carried over
     };
 };
 
@@ -91,11 +105,11 @@ const Modal: React.FC<{ isOpen: boolean, onClose: () => void, title: string, chi
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300" onClick={hideCloseButton ? undefined : onClose}>
-            <div className="bg-white border border-slate-200 rounded-lg shadow-2xl p-6 w-full max-w-lg relative animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-2xl font-bold mb-4 text-sky-600 text-center">{title}</h2>
+            <div className="bg-white border border-slate-200 rounded-lg shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-2xl font-bold mb-4 text-sky-600 text-center sticky top-0 bg-white pb-2 z-10 border-b border-slate-100">{title}</h2>
                 {children}
                 {!hideCloseButton && (
-                    <button type="button" onClick={onClose} className="absolute top-2 right-2 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors">
+                    <button type="button" onClick={onClose} className="absolute top-2 right-2 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors z-20">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 )}
@@ -180,7 +194,245 @@ const Header: React.FC<{ title: string, onBack?: () => void }> = ({ title, onBac
     </header>
 );
 
+const JournalDetail: React.FC<{ reflection: Reflection }> = ({ reflection }) => (
+    <div className="space-y-8 animate-fade-in">
+        <div className="text-center">
+            <div className="inline-block px-4 py-1 bg-sky-100 text-sky-700 rounded-full font-bold text-sm mb-2">
+                スコア: {reflection.score || 0}点
+            </div>
+            <p className="text-slate-500 text-sm">記録日: {reflection.date}</p>
+        </div>
+
+        {reflection.morning && (
+            <div className="bg-white border border-yellow-100 rounded-xl p-6 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-yellow-400"></div>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <span className="text-2xl">☀️</span> 朝の作戦会議
+                </h3>
+                {reflection.morning.freeMemo && (
+                    <div className="mb-4">
+                        <p className="text-xs font-bold text-slate-400 mb-1">フリーメモ</p>
+                        <div className="text-slate-700 bg-yellow-50/50 p-3 rounded" dangerouslySetInnerHTML={{ __html: reflection.morning.freeMemo }} />
+                    </div>
+                )}
+            </div>
+        )}
+
+        {reflection.dailyTasks && reflection.dailyTasks.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <span className="text-2xl">📝</span> タスク実行結果
+                </h3>
+                <ul className="space-y-2">
+                    {reflection.dailyTasks.map((task, i) => (
+                        <li key={i} className={`flex items-center p-3 rounded border ${task.completed ? 'bg-sky-50 border-sky-100' : 'bg-slate-50 border-slate-100'}`}>
+                            <span className={`mr-2 ${task.completed ? 'text-sky-500' : 'text-slate-300'}`}>
+                                {task.completed ? '✔' : '◻'}
+                            </span>
+                            <span className={task.completed ? 'text-slate-500 line-through' : 'text-slate-700'}>{task.text}</span>
+                            {task.type === 'main' && <span className="ml-auto text-xs font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded">MAIN</span>}
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        )}
+
+        {reflection.night && (
+            <div className="bg-white border border-indigo-100 rounded-xl p-6 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-400"></div>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <span className="text-2xl">🌙</span> 夜の振り返り
+                </h3>
+                <div className="space-y-4">
+                    {reflection.night.freeMemo && (
+                        <div>
+                             <p className="text-xs font-bold text-slate-400 mb-1">振り返り・感情</p>
+                             <div className="text-slate-700 bg-indigo-50/50 p-3 rounded" dangerouslySetInnerHTML={{ __html: reflection.night.freeMemo }} />
+                        </div>
+                    )}
+                    {reflection.night.wastedTime && (
+                         <div>
+                             <p className="text-xs font-bold text-slate-400 mb-1">無駄にした時間</p>
+                             <p className="text-rose-600 bg-rose-50 p-2 rounded border border-rose-100">{reflection.night.wastedTime}</p>
+                        </div>
+                    )}
+                    {reflection.night.extras && reflection.night.extras.length > 0 && (
+                        <div>
+                             <p className="text-xs font-bold text-slate-400 mb-1">プラスアルファの積み上げ</p>
+                             <ul className="list-disc list-inside text-emerald-600 bg-emerald-50 p-2 rounded border border-emerald-100">
+                                {reflection.night.extras.map((e, i) => <li key={i}>{e}</li>)}
+                             </ul>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+    </div>
+);
+
 // --- Sub Views ---
+
+const SettingsView: React.FC<{ settings: UserSettings, onSave: (settings: UserSettings) => void, onBack: () => void }> = ({ settings, onSave, onBack }) => {
+    const [longTermGoal, setLongTermGoal] = useState(settings.longTermGoal);
+    const [threeWeekGoal, setThreeWeekGoal] = useState(settings.threeWeekGoal || "");
+    const [threeWeekGoalDeadline, setThreeWeekGoalDeadline] = useState(settings.threeWeekGoalDeadline || "");
+
+    const handleSave = () => {
+        onSave({ ...settings, longTermGoal, threeWeekGoal, threeWeekGoalDeadline });
+    };
+
+    return (
+        <Card className="max-w-2xl mx-auto">
+            <Header title="設定・目標編集" onBack={onBack} />
+            <div className="space-y-6">
+                <div>
+                    <h3 className="font-bold text-slate-700 mb-2">1年後の抱負 (長期目標)</h3>
+                    <TextArea 
+                        value={longTermGoal} 
+                        onChange={(e) => setLongTermGoal(e.target.value)} 
+                        rows={3} 
+                        placeholder="1年後の理想の状態..."
+                    />
+                </div>
+                <div>
+                    <h3 className="font-bold text-slate-700 mb-2">
+                        三週間後
+                        {threeWeekGoalDeadline ? ` (${threeWeekGoalDeadline.replace(/-/g, '/')}) ` : ' '}
+                        のゴール
+                    </h3>
+                    <div className="space-y-3">
+                        <Input 
+                            value={threeWeekGoal} 
+                            onChange={(e) => setThreeWeekGoal(e.target.value)} 
+                            placeholder="短く覚えやすいスローガン..." 
+                        />
+                         <div className="flex flex-col gap-1">
+                            <label className="text-xs font-bold text-slate-500">期限設定</label>
+                            <Input 
+                                type="date"
+                                value={threeWeekGoalDeadline} 
+                                onChange={(e) => setThreeWeekGoalDeadline(e.target.value)} 
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                            ※ 旧バージョンから移行された方は、ここに新しい3週間ゴールと期限を入力してください。
+                        </p>
+                    </div>
+                </div>
+                
+                <div className="pt-4">
+                    <PrimaryButton onClick={handleSave} className="w-full">
+                        変更を保存
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Card>
+    );
+};
+
+const VisionBoardCreationView: React.FC<{
+    settings: UserSettings;
+    onSave: (imageUrl: string) => void;
+    onBack: () => void;
+}> = ({ settings, onSave, onBack }) => {
+    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const [visionImage, setVisionImage] = useState<string | null>(null);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (chatHistory.length === 0) {
+            setChatHistory([{
+                role: 'model',
+                text: `現在の3週間ゴール：「${settings.threeWeekGoal}」\n\nこのゴールを達成した時の最高の瞬間をイメージして、ビジョンボードを描きましょう。\n\nその時、あなたはどこにいて、どんな景色を見ていますか？`
+            }]);
+        }
+    }, [settings.threeWeekGoal]);
+
+    useEffect(() => {
+        if (chatScrollRef.current) {
+            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+    }, [chatHistory, isChatLoading, isGeneratingImage]);
+
+    const handleChatSend = async () => {
+        if (!chatInput.trim()) return;
+        const userMsg = { role: 'user' as const, text: chatInput };
+        const newHistory = [...chatHistory, userMsg];
+        setChatHistory(newHistory);
+        setChatInput("");
+        setIsChatLoading(true);
+        // Reuse visionBoardChat service but context is slightly different, 
+        // passing current goal + long term goal as "goal" context is good enough.
+        const responseText = await geminiService.visionBoardChat(newHistory, settings.longTermGoal);
+        setChatHistory([...newHistory, { role: 'model', text: responseText }]);
+        setIsChatLoading(false);
+    };
+
+    const handleGenerateVisionBoard = async () => {
+        setIsGeneratingImage(true);
+        // Include the explicit goal in the history for context if needed, but the service handles history well.
+        const imageUrl = await geminiService.generateVisionBoardImage(chatHistory, settings.longTermGoal);
+        setVisionImage(imageUrl);
+        setIsGeneratingImage(false);
+    };
+
+    return (
+        <Card className="max-w-2xl mx-auto h-[600px] flex flex-col">
+            <Header title="ビジョンボード作成" onBack={onBack} />
+            
+            {!visionImage ? (
+                <>
+                    <div className="flex-1 overflow-y-auto bg-slate-50 rounded-lg p-4 mb-4 border border-slate-200" ref={chatScrollRef}>
+                        {chatHistory.map((msg, i) => (
+                            <div key={i} className={`flex mb-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-sky-500 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'}`}>
+                                    {msg.text}
+                                </div>
+                            </div>
+                        ))}
+                        {isChatLoading && <div className="text-xs text-slate-400 animate-pulse">AIが考え中...</div>}
+                        
+                        {isGeneratingImage && (
+                            <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg animate-pulse my-4">
+                                <ImageIcon className="w-10 h-10 text-slate-300 mb-2" />
+                                <p className="text-xs text-slate-500">ビジョンボードを描いています...</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2 mb-4">
+                        <Input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleChatSend()} placeholder="返信を入力..." className="flex-1" disabled={isGeneratingImage} />
+                        <button type="button" onClick={handleChatSend} disabled={!chatInput || isChatLoading || isGeneratingImage} className="bg-sky-500 text-white p-2 rounded hover:bg-sky-600 transition disabled:opacity-50"><SendIcon className="w-5 h-5"/></button>
+                    </div>
+
+                    {chatHistory.length > 2 && !isGeneratingImage && (
+                        <div className="mb-2">
+                            <button 
+                                onClick={handleGenerateVisionBoard}
+                                className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold rounded-xl shadow-md hover:shadow-lg transform hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                            >
+                                <ImageIcon className="w-5 h-5" />
+                                <span>この内容でビジョンボードを描く</span>
+                            </button>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="flex flex-col items-center justify-center h-full animate-fade-in">
+                    <img src={visionImage} alt="Generated Vision Board" className="max-h-[300px] rounded-lg shadow-xl border-4 border-white mb-6" />
+                    <p className="text-slate-600 font-bold mb-4 text-center">ビジョンボードが完成しました！</p>
+                    <div className="flex gap-4 w-full">
+                        <SecondaryButton onClick={() => setVisionImage(null)} className="flex-1">描き直す</SecondaryButton>
+                        <PrimaryButton onClick={() => onSave(visionImage)} className="flex-1">保存して完了</PrimaryButton>
+                    </div>
+                </div>
+            )}
+        </Card>
+    );
+};
 
 const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading: (loading: boolean) => void }> = ({ onSave, setLoading }) => {
     const [step, setStep] = useState(1);
@@ -193,6 +445,10 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
     const [chatInput, setChatInput] = useState("");
     const [threeWeekGoal, setThreeWeekGoal] = useState("");
     const [isChatLoading, setIsChatLoading] = useState(false);
+    // Vision Board State
+    const [visionImage, setVisionImage] = useState<string | null>(null);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
     const chatScrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -237,14 +493,24 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
         setLoading(false);
     };
 
+    const handleGenerateVisionBoard = async () => {
+        setIsGeneratingImage(true);
+        const imageUrl = await geminiService.generateVisionBoardImage(chatHistory, longTermGoal);
+        setVisionImage(imageUrl);
+        setIsGeneratingImage(false);
+    };
+
     const handleSave = () => {
+        const today = getLocalTodayDate();
         const settings: UserSettings = {
             longTermGoal,
             threeWeekGoal,
+            threeWeekGoalDeadline: addDays(today, 21), // Set initial deadline
             yearStartMonth: new Date().getMonth(),
-            commitmentStartDate: getLocalTodayDate(),
+            commitmentStartDate: today,
             goalDurationDays: 365,
             depositAmount: 0,
+            visionBoardImage: visionImage || undefined,
         };
         onSave(settings);
     };
@@ -299,8 +565,9 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
                     <>
                         <h2 className="text-xl font-semibold mb-2">Step 3: 3週間後のビジョン</h2>
                         {!threeWeekGoal ? (
-                            <div className="flex flex-col h-[400px]">
+                            <div className="flex flex-col h-[500px]">
                                 <p className="text-slate-600 text-sm mb-2">AIコーチと対話して、3週間後の「最高にワクワクする状態」を具体化しましょう。</p>
+                                
                                 <div className="flex-1 overflow-y-auto bg-slate-50 rounded-lg p-4 mb-4 border border-slate-200" ref={chatScrollRef}>
                                     {chatHistory.map((msg, i) => (
                                         <div key={i} className={`flex mb-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -310,17 +577,57 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
                                         </div>
                                     ))}
                                     {isChatLoading && <div className="text-xs text-slate-400 animate-pulse">AIが考え中...</div>}
+                                    
+                                    {/* Vision Board Image Preview */}
+                                    {isGeneratingImage && (
+                                        <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg animate-pulse">
+                                            <ImageIcon className="w-10 h-10 text-slate-300 mb-2" />
+                                            <p className="text-xs text-slate-500">ビジョンボードを描いています...</p>
+                                        </div>
+                                    )}
+                                    {visionImage && (
+                                        <div className="mt-4 mb-2">
+                                            <p className="text-xs font-bold text-sky-600 mb-1">生成されたビジョンボード</p>
+                                            <img src={visionImage} alt="Vision Board" className="w-full rounded-lg shadow-md border-4 border-white" />
+                                        </div>
+                                    )}
                                 </div>
+                                
                                 <div className="flex gap-2 mb-4">
                                     <Input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleChatSend()} placeholder="返信を入力..." className="flex-1" />
                                     <button type="button" onClick={handleChatSend} disabled={!chatInput || isChatLoading} className="bg-sky-500 text-white p-2 rounded hover:bg-sky-600 transition disabled:opacity-50"><SendIcon className="w-5 h-5"/></button>
                                 </div>
+
+                                {/* Vision Board Generation Button */}
+                                {chatHistory.length > 4 && !visionImage && !isGeneratingImage && (
+                                    <div className="mb-4">
+                                        <button 
+                                            onClick={handleGenerateVisionBoard}
+                                            className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold rounded-xl shadow-md hover:shadow-lg transform hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <ImageIcon className="w-5 h-5" />
+                                            <span>AIでビジョンボードを描く</span>
+                                        </button>
+                                        <p className="text-xs text-center text-slate-400 mt-1">※会話内容を元にAIが未来の絵を描きます</p>
+                                    </div>
+                                )}
+
                                 <PrimaryButton onClick={handleFinishChat} disabled={chatHistory.length < 5} className="w-full">
                                     {chatHistory.length < 5 ? "もう少し対話を続ける" : "この内容で3週間のゴールを生成"}
                                 </PrimaryButton>
                             </div>
                         ) : (
                             <div className="animate-fade-in">
+                                {visionImage && (
+                                    <div className="mb-6 flex justify-center">
+                                        <div className="relative max-w-sm">
+                                            <img src={visionImage} alt="Vision Board" className="rounded-lg shadow-xl rotate-1 border-4 border-white" />
+                                            <div className="absolute -bottom-3 -right-3 bg-white p-2 rounded-full shadow-lg">
+                                                <ImageIcon className="w-6 h-6 text-purple-600" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <h3 className="font-bold text-sky-600 mb-2">生成された3週間のゴール:</h3>
                                 <TextArea value={threeWeekGoal} onChange={(e) => setThreeWeekGoal(e.target.value)} className="mb-6 text-lg font-bold text-slate-800" />
                                 <div className="flex gap-3">
@@ -379,6 +686,8 @@ const DashboardView: React.FC<{
     onNavigate: (view: AppView) => void;
     onUpdateTasks: (tasks: DailyTask[]) => void;
 }> = ({ settings, reflections, totalScore, currentStreak, currentQuarterlyGoal, todayStr, currentReflection, onNavigate, onUpdateTasks }) => {
+    const [isVisionBoardOpen, setIsVisionBoardOpen] = useState(false);
+
     const toggleTaskCompletion = (index: number) => {
         if (!currentReflection || !currentReflection.dailyTasks) return;
         const newTasks = [...currentReflection.dailyTasks];
@@ -396,9 +705,16 @@ const DashboardView: React.FC<{
     return (
         <div className="space-y-6">
             <header className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="col-span-1 md:col-span-2">
+                <Card className="col-span-1 md:col-span-2 relative">
                     <h2 className="text-sm font-bold text-sky-600 mb-1">現在の3週間ゴール</h2>
                     <p className="text-lg font-semibold text-slate-800">{currentQuarterlyGoal}</p>
+                    {settings.threeWeekGoalDeadline && (
+                        <div className="flex justify-end mt-2">
+                             <span className="text-sm text-slate-400 font-medium">
+                                ({settings.threeWeekGoalDeadline.replace(/-/g, '/')}まで)
+                            </span>
+                        </div>
+                    )}
                 </Card>
                 <div className="grid grid-cols-2 gap-4">
                     <Card className="text-center">
@@ -411,6 +727,7 @@ const DashboardView: React.FC<{
                     </Card>
                 </div>
             </header>
+            <CommitmentRoad totalScore={totalScore} />
             <GrowthGraph reflections={reflections} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
@@ -443,12 +760,34 @@ const DashboardView: React.FC<{
                     </Card>
                 </div>
                 <div className="space-y-4">
-                     <button type="button" onClick={() => onNavigate('SPICY_FEEDBACK')} className="w-full bg-gradient-to-r from-orange-400 to-red-500 text-white p-4 rounded-xl shadow-lg hover:from-orange-500 hover:to-red-600 transition flex items-center justify-center gap-2 font-bold transform hover:scale-[1.02]"><MessageSquareIcon className="w-6 h-6" />仲間の声</button>
+                    {settings.visionBoardImage ? (
+                        <button type="button" onClick={() => setIsVisionBoardOpen(true)} className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-4 rounded-xl shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2 font-bold transform hover:scale-[1.02]">
+                            <ImageIcon className="w-6 h-6" />ビジョンボードを見る
+                        </button>
+                    ) : (
+                        <button type="button" onClick={() => onNavigate('VISION_BOARD_CREATION')} className="w-full bg-white text-purple-600 border-2 border-purple-200 p-4 rounded-xl shadow-sm hover:bg-purple-50 transition flex items-center justify-center gap-2 font-bold group">
+                            <ImageIcon className="w-6 h-6 group-hover:scale-110 transition-transform" />ビジョンボードを作成
+                        </button>
+                    )}
+                    <button type="button" onClick={() => onNavigate('SPICY_FEEDBACK')} className="w-full bg-gradient-to-r from-orange-400 to-red-500 text-white p-4 rounded-xl shadow-lg hover:from-orange-500 hover:to-red-600 transition flex items-center justify-center gap-2 font-bold transform hover:scale-[1.02]"><MessageSquareIcon className="w-6 h-6" />仲間の声</button>
                     <button type="button" onClick={() => onNavigate('AI_TWIN')} className="w-full bg-white text-purple-600 border-2 border-purple-200 p-4 rounded-xl shadow-sm hover:bg-purple-50 transition flex items-center justify-center gap-2 font-bold"><GhostIcon className="w-6 h-6" />AIツインと話す</button>
+                    <button type="button" onClick={() => onNavigate('JOURNAL_LOG')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><CalendarIcon className="w-5 h-5 text-slate-500" />ジャーナル履歴</button>
                     <button type="button" onClick={() => onNavigate('SIDE_PROJECTS')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><BrainCircuitIcon className="w-5 h-5 text-slate-500" />サイドプロジェクト</button>
                     <button type="button" onClick={() => onNavigate('MEMO_PAD')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><FileTextIcon className="w-5 h-5 text-slate-500" />メモ</button>
+                    <button type="button" onClick={() => onNavigate('SETTINGS')} className="w-full bg-white text-slate-700 border border-slate-200 p-4 rounded-xl shadow-sm hover:bg-slate-50 transition flex items-center justify-center gap-2 font-semibold"><SettingsIcon className="w-5 h-5 text-slate-500" />目標・設定の編集</button>
                 </div>
             </div>
+            
+            {/* Vision Board Modal */}
+            <Modal isOpen={isVisionBoardOpen} onClose={() => setIsVisionBoardOpen(false)} title="あなたのビジョンボード">
+                <div className="flex flex-col items-center">
+                    {settings.visionBoardImage && (
+                        <img src={settings.visionBoardImage} alt="Vision Board" className="w-full rounded-lg shadow-xl border-4 border-white mb-4" />
+                    )}
+                    <p className="text-center text-slate-600 font-bold mb-2">"{settings.threeWeekGoal}"</p>
+                    <p className="text-sm text-slate-400">理想の未来を毎日眺めて、潜在意識に刻み込みましょう。</p>
+                </div>
+            </Modal>
         </div>
     );
 };
@@ -725,22 +1064,17 @@ const NightReflectionView: React.FC<{
     );
 };
 
-const AITwinView: React.FC<{ reflections: Reflection[], onBack: () => void }> = ({ reflections, onBack }) => {
+const AITwinView: React.FC<{ reflections: Reflection[], onBack: () => void, settings: UserSettings | null }> = ({ reflections, onBack, settings }) => {
     const [history, setHistory] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [twinReflection, setTwinReflection] = useState<Reflection | null>(null);
+    const [calendarDate, setCalendarDate] = useState(new Date());
 
-    useEffect(() => {
-        const valid = reflections.filter(r => r.morning && r.night && r.date !== getLocalTodayDate());
-        if (valid.length > 0) {
-            const target = valid[valid.length - 1];
-            setTwinReflection(target);
-            setHistory([{ role: 'model', text: `こんにちは。${target.date}の私です。あの日のことなら何でも聞いてください。` }]);
-        } else {
-             setHistory([{ role: 'model', text: "過去の記録が見つかりません。まずは日々の記録をつけましょう。" }]);
-        }
-    }, [reflections]);
+    const handleSelectDate = (reflection: Reflection) => {
+        setTwinReflection(reflection);
+        setHistory([{ role: 'model', text: `こんにちは。${reflection.date}の私です。あの日のことなら何でも聞いてください。` }]);
+    };
 
     const handleSend = async () => {
         if (!input.trim() || !twinReflection) return;
@@ -753,9 +1087,33 @@ const AITwinView: React.FC<{ reflections: Reflection[], onBack: () => void }> = 
         setLoading(false);
     };
 
+    if (!twinReflection) {
+        return (
+            <Card className="max-w-2xl mx-auto min-h-[500px] flex flex-col">
+                <Header title="AI Twin (過去の自分と対話)" onBack={onBack} />
+                <p className="text-slate-600 mb-6">いつの自分と話したいですか？カレンダーから日付を選択してください。</p>
+                <div className="flex-1">
+                    <Calendar 
+                        reflections={reflections} 
+                        onDayClick={handleSelectDate} 
+                        currentDate={calendarDate} 
+                        setCurrentDate={setCalendarDate}
+                        settings={settings}
+                    />
+                </div>
+            </Card>
+        );
+    }
+
     return (
         <Card className="max-w-2xl mx-auto h-[600px] flex flex-col">
-            <Header title="AI Twin (過去の自分)" onBack={onBack} />
+            <header className="flex items-center mb-6">
+                 <button type="button" onClick={() => setTwinReflection(null)} className="mr-4 p-2 rounded-full hover:bg-slate-200 transition">
+                    <ChevronLeftIcon className="w-6 h-6" />
+                </button>
+                <h1 className="text-2xl font-bold text-slate-800 tracking-tight">AI Twin ({twinReflection.date})</h1>
+            </header>
+            
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-xl mb-4 border border-slate-100">
                 {history.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -771,6 +1129,46 @@ const AITwinView: React.FC<{ reflections: Reflection[], onBack: () => void }> = 
                 <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} placeholder="メッセージを入力..." disabled={!twinReflection} />
                 <PrimaryButton onClick={handleSend} disabled={!input || !twinReflection} className="px-4"><SendIcon className="w-5 h-5"/></PrimaryButton>
             </div>
+        </Card>
+    );
+};
+
+const JournalLogView: React.FC<{ reflections: Reflection[], onBack: () => void, settings: UserSettings | null }> = ({ reflections, onBack, settings }) => {
+    const [selectedReflection, setSelectedReflection] = useState<Reflection | null>(null);
+    const [calendarDate, setCalendarDate] = useState(new Date());
+
+    return (
+        <Card className="max-w-4xl mx-auto min-h-[600px]">
+            <Header title="ジャーナル履歴" onBack={onBack} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 className="font-bold text-slate-700 mb-4">日付を選択</h3>
+                    <Calendar 
+                        reflections={reflections} 
+                        onDayClick={setSelectedReflection} 
+                        currentDate={calendarDate} 
+                        setCurrentDate={setCalendarDate}
+                        settings={settings}
+                    />
+                </div>
+                <div className="border-l border-slate-100 pl-8 md:block hidden">
+                    <h3 className="font-bold text-slate-700 mb-4">詳細</h3>
+                    {selectedReflection ? (
+                        <div className="h-[500px] overflow-y-auto pr-2">
+                             <JournalDetail reflection={selectedReflection} />
+                        </div>
+                    ) : (
+                         <div className="flex flex-col items-center justify-center h-[400px] text-slate-400">
+                             <CalendarIcon className="w-16 h-16 mb-4 opacity-20" />
+                             <p>左のカレンダーから<br/>日付を選択してください</p>
+                         </div>
+                    )}
+                </div>
+            </div>
+            {/* Mobile Modal for Detail */}
+            <Modal isOpen={!!selectedReflection && window.innerWidth < 768} onClose={() => setSelectedReflection(null)} title={selectedReflection?.date || ""} hideCloseButton={false}>
+                 {selectedReflection && <JournalDetail reflection={selectedReflection} />}
+            </Modal>
         </Card>
     );
 };
@@ -874,7 +1272,17 @@ const App: React.FC = () => {
     const saveReflections = (newReflections: Reflection[]) => { setReflections(newReflections); localStorage.setItem('comit_reflections', JSON.stringify(newReflections)); };
 
     const handleSetupSave = (newSettings: UserSettings) => { saveSettings(newSettings); setView('DEPOSIT'); };
-    const handleGoalRenewal = (newGoal: string) => { if (!settings) return; const updated = { ...settings, threeWeekGoal: newGoal, commitmentStartDate: today }; saveSettings(updated); setView('DASHBOARD'); };
+    const handleGoalRenewal = (newGoal: string) => { 
+        if (!settings) return; 
+        const updated = { 
+            ...settings, 
+            threeWeekGoal: newGoal, 
+            commitmentStartDate: today,
+            threeWeekGoalDeadline: addDays(today, 21), // Update deadline on renewal
+        }; 
+        saveSettings(updated); 
+        setView('DASHBOARD'); 
+    };
     const handleUpdateSettings = (newSettings: UserSettings) => saveSettings(newSettings);
     const handleRegisterPrototyper = () => { if (!settings) return; saveSettings({ ...settings, isPrototyperRegistered: true }); };
 
@@ -958,10 +1366,31 @@ const App: React.FC = () => {
                             setLoading={setLoading}
                         />
                     )}
-                    {view === 'AI_TWIN' && <AITwinView reflections={reflections} onBack={() => setView('DASHBOARD')} />}
+                    {view === 'AI_TWIN' && <AITwinView reflections={reflections} onBack={() => setView('DASHBOARD')} settings={settings} />}
                     {view === 'SPICY_FEEDBACK' && <SpicyFeedbackView reflections={reflections} onBack={() => setView('DASHBOARD')} />}
+                    {view === 'JOURNAL_LOG' && <JournalLogView reflections={reflections} onBack={() => setView('DASHBOARD')} settings={settings} />}
+                    {view === 'VISION_BOARD_CREATION' && (
+                        <VisionBoardCreationView 
+                            settings={settings} 
+                            onSave={(imageUrl) => { 
+                                handleUpdateSettings({ ...settings, visionBoardImage: imageUrl }); 
+                                setView('DASHBOARD'); 
+                            }} 
+                            onBack={() => setView('DASHBOARD')} 
+                        />
+                    )}
                     {view === 'SIDE_PROJECTS' && <SideProjectsView settings={settings} onBack={() => setView('DASHBOARD')} onUpdateSettings={handleUpdateSettings} />}
                     {view === 'MEMO_PAD' && <MemoPadView onBack={() => setView('DASHBOARD')} />}
+                    {view === 'SETTINGS' && (
+                        <SettingsView 
+                            settings={settings} 
+                            onSave={(newSettings) => { 
+                                handleUpdateSettings(newSettings); 
+                                setView('DASHBOARD'); 
+                            }} 
+                            onBack={() => setView('DASHBOARD')} 
+                        />
+                    )}
                     {view === 'GOAL_RENEWAL' && <GoalRenewalView settings={settings} reflections={reflections} onSave={handleGoalRenewal} setLoading={setLoading} />}
                  </div>
             </div>
