@@ -8,11 +8,11 @@ export interface SideProject {
 
 export interface UserSettings {
   yearStartMonth: number; // 0-11 for Jan-Dec
-  longTermGoal: string;
-  quarterlyGoals?: [string, string, string, string]; // Deprecated but kept for type safety if needed temporarily
-  threeWeekGoal?: string; // New: 3-week ideal vision
-  threeWeekGoalDeadline?: string; // New: The specific date the 3-week goal ends
-  visionBoardImage?: string; // New: Base64 string of the generated vision board
+  quarterlyGoal: string; // Renamed from longTermGoal: 3-Month Aspiration
+  quarterlyGoalDeadline: string; // New: Deadline for the 3-month goal
+  threeWeekGoal?: string; // 3-week ideal vision
+  threeWeekGoalDeadline?: string; // The specific date the 3-week goal ends
+  visionBoardImage?: string; // Base64 string of the generated vision board
   commitmentStartDate: string; // YYYY-MM-DD
   goalDurationDays: number;
   depositAmount: number;
@@ -20,7 +20,7 @@ export interface UserSettings {
   firstSuccessAchieved?: boolean;
   lastAITwinSessionDate?: string;
   lastMentoringDate?: string; // For controlling pop-up frequency
-  isPrototyperRegistered?: boolean; // New: Hides prototype modal/banner
+  isPrototyperRegistered?: boolean; // Hides prototype modal/banner
 }
 
 export interface MorningReflectionData {
@@ -28,11 +28,17 @@ export interface MorningReflectionData {
   freeMemo?: string;
 }
 
+export interface WastedTimeLog {
+  activity: string;
+  minutes: number;
+}
+
 export interface NightReflectionData {
   feelings: string;
   freeMemo?: string;
   achievementAnalysis: string;
-  wastedTime: string;
+  wastedTime?: string; // Deprecated string format
+  wastedTimeLogs?: WastedTimeLog[]; // New structured format
   wastedTimeMinutes?: number;
   extras: string[];
   tomorrowIdeas: string;
@@ -61,7 +67,7 @@ export interface RoadSegment {
   score: number;
 }
 
-export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE' | 'GOAL_RENEWAL' | 'SETTINGS' | 'JOURNAL_LOG' | 'VISION_BOARD_CREATION';
+export type AppView = 'SETUP' | 'DEPOSIT' | 'DASHBOARD' | 'MORNING_CONVERSATION' | 'NIGHT_REFLECTION' | 'AI_TWIN' | 'SPICY_FEEDBACK' | 'SIDE_PROJECTS' | 'MEMO_PAD' | 'ONLINE_FEATURES' | 'PEER_PROFILE' | 'GOAL_RENEWAL' | 'QUARTERLY_RENEWAL' | 'SETTINGS' | 'JOURNAL_LOG' | 'VISION_BOARD_CREATION';
 
 export interface AITwin {
   date: string;

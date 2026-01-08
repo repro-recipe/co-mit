@@ -1,12 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { UserSettings, Reflection, DailyTask, AppView, ChatMessage, MorningReflectionData, NightReflectionData, SideProject, Memo } from './types';
+import type { UserSettings, Reflection, DailyTask, AppView, ChatMessage, MorningReflectionData, NightReflectionData, SideProject, Memo, WastedTimeLog } from './types';
 import * as geminiService from './services/geminiService';
 import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon, SettingsIcon, CalendarIcon, ImageIcon } from './components/Icons';
 import GrowthGraph from './components/GrowthGraph';
 import RichTextEditor from './components/RichTextEditor';
 import Calendar from './components/Calendar';
-import CommitmentRoad from './components/Road';
 
 // --- Helpers ---
 
@@ -38,6 +37,9 @@ const migrateSettings = (settings: any): UserSettings => {
     return {
         ...settings,
         commitmentStartDate: settings.commitmentStartDate || today,
+        // Migration: longTermGoal -> quarterlyGoal
+        quarterlyGoal: settings.quarterlyGoal || settings.longTermGoal || "",
+        quarterlyGoalDeadline: settings.quarterlyGoalDeadline || addDays(settings.commitmentStartDate || today, 365),
         threeWeekGoal: settings.threeWeekGoal || (settings.quarterlyGoals && settings.quarterlyGoals.length > 0 ? settings.quarterlyGoals[0] : ""),
         isPrototyperRegistered: settings.isPrototyperRegistered ?? false,
         // Default to 2026-01-21 if no deadline exists (Requested by user for legacy data)
@@ -250,12 +252,31 @@ const JournalDetail: React.FC<{ reflection: Reflection }> = ({ reflection }) => 
                              <div className="text-slate-700 bg-indigo-50/50 p-3 rounded" dangerouslySetInnerHTML={{ __html: reflection.night.freeMemo }} />
                         </div>
                     )}
-                    {reflection.night.wastedTime && (
+                    {/* Updated Wasted Time Display */}
+                    {reflection.night.wastedTimeLogs && reflection.night.wastedTimeLogs.length > 0 && (
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 mb-1">無駄にした時間</p>
+                            <div className="bg-rose-50 p-3 rounded border border-rose-100">
+                                <ul className="list-disc list-inside text-rose-600 mb-2">
+                                    {reflection.night.wastedTimeLogs.map((log, idx) => (
+                                        <li key={idx} className="text-sm">
+                                            {log.activity} <span className="font-bold">({log.minutes}分)</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                {reflection.night.wastedTimeMinutes !== undefined && (
+                                     <p className="text-right text-xs font-bold text-rose-400">合計: {reflection.night.wastedTimeMinutes}分 (減点: -{Math.floor(reflection.night.wastedTimeMinutes / 10)})</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {!reflection.night.wastedTimeLogs && reflection.night.wastedTime && (
                          <div>
                              <p className="text-xs font-bold text-slate-400 mb-1">無駄にした時間</p>
                              <p className="text-rose-600 bg-rose-50 p-2 rounded border border-rose-100">{reflection.night.wastedTime}</p>
                         </div>
                     )}
+                    
                     {reflection.night.extras && reflection.night.extras.length > 0 && (
                         <div>
                              <p className="text-xs font-bold text-slate-400 mb-1">プラスアルファの積み上げ</p>
@@ -273,12 +294,13 @@ const JournalDetail: React.FC<{ reflection: Reflection }> = ({ reflection }) => 
 // --- Sub Views ---
 
 const SettingsView: React.FC<{ settings: UserSettings, onSave: (settings: UserSettings) => void, onBack: () => void }> = ({ settings, onSave, onBack }) => {
-    const [longTermGoal, setLongTermGoal] = useState(settings.longTermGoal);
+    // Map quarterlyGoal to longTermGoal state for UI consistency
+    const [longTermGoal, setLongTermGoal] = useState(settings.quarterlyGoal);
     const [threeWeekGoal, setThreeWeekGoal] = useState(settings.threeWeekGoal || "");
     const [threeWeekGoalDeadline, setThreeWeekGoalDeadline] = useState(settings.threeWeekGoalDeadline || "");
 
     const handleSave = () => {
-        onSave({ ...settings, longTermGoal, threeWeekGoal, threeWeekGoalDeadline });
+        onSave({ ...settings, quarterlyGoal: longTermGoal, threeWeekGoal, threeWeekGoalDeadline });
     };
 
     return (
@@ -366,7 +388,7 @@ const VisionBoardCreationView: React.FC<{
         setIsChatLoading(true);
         // Reuse visionBoardChat service but context is slightly different, 
         // passing current goal + long term goal as "goal" context is good enough.
-        const responseText = await geminiService.visionBoardChat(newHistory, settings.longTermGoal);
+        const responseText = await geminiService.visionBoardChat(newHistory, settings.quarterlyGoal);
         setChatHistory([...newHistory, { role: 'model', text: responseText }]);
         setIsChatLoading(false);
     };
@@ -374,7 +396,7 @@ const VisionBoardCreationView: React.FC<{
     const handleGenerateVisionBoard = async () => {
         setIsGeneratingImage(true);
         // Include the explicit goal in the history for context if needed, but the service handles history well.
-        const imageUrl = await geminiService.generateVisionBoardImage(chatHistory, settings.longTermGoal);
+        const imageUrl = await geminiService.generateVisionBoardImage(chatHistory, settings.quarterlyGoal);
         setVisionImage(imageUrl);
         setIsGeneratingImage(false);
     };
@@ -503,7 +525,8 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
     const handleSave = () => {
         const today = getLocalTodayDate();
         const settings: UserSettings = {
-            longTermGoal,
+            quarterlyGoal: longTermGoal, // Mapped to quarterlyGoal
+            quarterlyGoalDeadline: addDays(today, 365),
             threeWeekGoal,
             threeWeekGoalDeadline: addDays(today, 21), // Set initial deadline
             yearStartMonth: new Date().getMonth(),
@@ -727,8 +750,7 @@ const DashboardView: React.FC<{
                     </Card>
                 </div>
             </header>
-            <CommitmentRoad totalScore={totalScore} />
-            <GrowthGraph reflections={reflections} />
+            <GrowthGraph reflections={reflections} settings={settings} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card>
@@ -949,19 +971,52 @@ const NightReflectionView: React.FC<{
     const [step, setStep] = useState(1);
     const [localTasks, setLocalTasks] = useState<DailyTask[]>(tasks);
     const [feelings, setFeelings] = useState(""); 
-    const [wastedTime, setWastedTime] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [extrasList, setExtrasList] = useState<string[]>([]);
     const [extraInput, setExtraInput] = useState("");
     const [failureReason, setFailureReason] = useState("");
     const [aiFailureFeedback, setAiFailureFeedback] = useState("");
     
+    // Wasted Time State (New Feature)
+    const [wastedTimeLogs, setWastedTimeLogs] = useState<WastedTimeLog[]>([]);
+    const [currentWastedActivity, setCurrentWastedActivity] = useState("");
+    const [currentWastedMinutes, setCurrentWastedMinutes] = useState(0);
+    
     const uncompletedTasks = localTasks.filter(t => !t.completed);
     const toggleLocalTask = (index: number) => { const newTasks = [...localTasks]; newTasks[index].completed = !newTasks[index].completed; setLocalTasks(newTasks); };
     const handleFailureAnalysis = async () => { setLoading(true); const result = await geminiService.analyzeFailureReason(failureReason, sideProjects); setLoading(false); setAiFailureFeedback(result.response); };
     const handleAddExtra = () => { if(!extraInput.trim()) return; setExtrasList([...extrasList, extraInput]); setExtraInput(""); };
     const handleRemoveExtra = (index: number) => { setExtrasList(extrasList.filter((_, i) => i !== index)); };
-    const handleFinish = () => { if(isSaving) return; setIsSaving(true); const data: NightReflectionData = { feelings: "", freeMemo: feelings, achievementAnalysis: "", wastedTime, extras: extrasList, tomorrowIdeas: "" }; onSave(data, localTasks); };
+
+    const handleAddWastedTime = () => {
+        if (currentWastedActivity && currentWastedMinutes > 0) {
+            setWastedTimeLogs([...wastedTimeLogs, { activity: currentWastedActivity, minutes: currentWastedMinutes }]);
+            setCurrentWastedActivity("");
+            setCurrentWastedMinutes(0);
+        }
+    };
+    const handleRemoveWastedTime = (index: number) => {
+        setWastedTimeLogs(wastedTimeLogs.filter((_, i) => i !== index));
+    };
+
+    const handleFinish = () => { 
+        if(isSaving) return; 
+        setIsSaving(true); 
+        
+        const totalWasted = wastedTimeLogs.reduce((acc, log) => acc + log.minutes, 0);
+
+        const data: NightReflectionData = { 
+            feelings: "", // Deprecated field
+            freeMemo: feelings, 
+            achievementAnalysis: "", // Not used in this version
+            wastedTime: "", // Deprecated field
+            wastedTimeLogs: wastedTimeLogs, // New Feature
+            wastedTimeMinutes: totalWasted, // New Feature
+            extras: extrasList, 
+            tomorrowIdeas: "" // Not used in this version
+        }; 
+        onSave(data, localTasks); 
+    };
 
     const renderStep = () => {
         if (step === 1) {
@@ -1011,8 +1066,61 @@ const NightReflectionView: React.FC<{
                  <div className="max-w-2xl mx-auto animate-fade-in text-center">
                     <h2 className="text-xl font-bold mb-4 text-slate-800">時間の使い方</h2>
                     <p className="text-slate-600 mb-6">今日、無駄にしてしまった時間はありますか？正直に記録しましょう。</p>
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6"><label className="block text-sm font-bold text-slate-600 mb-2 text-left">無駄にした時間 (分単位/内容)</label><Input value={wastedTime} onChange={e => setWastedTime(e.target.value)} placeholder="例: SNSを見ていた30分, 特になし" /></div>
-                    <div className="flex gap-4"><SecondaryButton onClick={() => setStep(2)} className="flex-1">戻る</SecondaryButton><PrimaryButton onClick={() => setStep(4)} className="flex-1">次へ</PrimaryButton></div>
+                    
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6 text-left">
+                        <label className="block text-sm font-bold text-slate-600 mb-2">無駄にした時間</label>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <Input 
+                                placeholder="内容 (例: SNS, 動画)" 
+                                value={currentWastedActivity} 
+                                onChange={e => setCurrentWastedActivity(e.target.value)} 
+                                className="flex-1"
+                            />
+                            <Input 
+                                type="number" 
+                                placeholder="分" 
+                                value={currentWastedMinutes || ""} 
+                                onChange={e => setCurrentWastedMinutes(Number(e.target.value))} 
+                                className="w-24"
+                            />
+                            <button 
+                                type="button" 
+                                onClick={handleAddWastedTime} 
+                                disabled={!currentWastedActivity || !currentWastedMinutes} 
+                                className="bg-rose-500 text-white px-4 rounded-lg font-bold disabled:opacity-50 hover:bg-rose-600 transition"
+                            >
+                                追加
+                            </button>
+                        </div>
+
+                        {wastedTimeLogs.length > 0 ? (
+                            <ul className="space-y-2 mb-2">
+                                {wastedTimeLogs.map((log, i) => (
+                                    <li key={i} className="flex justify-between items-center bg-rose-50 p-3 rounded text-rose-800 border border-rose-100">
+                                        <span>{log.activity}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-bold">{log.minutes}分</span>
+                                            <button type="button" onClick={() => handleRemoveWastedTime(i)} className="text-rose-400 hover:text-rose-600">×</button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                             <p className="text-center text-slate-400 text-sm py-2">記録なし (Good!)</p>
+                        )}
+                        
+                        {wastedTimeLogs.length > 0 && (
+                            <div className="text-right text-sm font-bold text-rose-600 mt-2">
+                                合計: {wastedTimeLogs.reduce((acc, l) => acc + l.minutes, 0)}分
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-4">
+                        <SecondaryButton onClick={() => setStep(2)} className="flex-1">戻る</SecondaryButton>
+                        <PrimaryButton onClick={() => setStep(4)} className="flex-1">次へ</PrimaryButton>
+                    </div>
                  </div>
             );
         }
@@ -1232,7 +1340,7 @@ const GoalRenewalView: React.FC<{
     const [review, setReview] = useState("");
     const [suggestedGoal, setSuggestedGoal] = useState("");
     const [step, setStep] = useState(1);
-    const handleAnalyze = async () => { setLoading(true); const totalScore = reflections.reduce((acc, r) => acc + (r.score || 0), 0); const nextGoal = await geminiService.generateNextGoal(settings.longTermGoal, review, totalScore); setSuggestedGoal(nextGoal); setLoading(false); setStep(2); };
+    const handleAnalyze = async () => { setLoading(true); const totalScore = reflections.reduce((acc, r) => acc + (r.score || 0), 0); const nextGoal = await geminiService.generateNextGoal(settings.quarterlyGoal, review, totalScore); setSuggestedGoal(nextGoal); setLoading(false); setStep(2); };
     return (
         <Card className="max-w-2xl mx-auto">
             <div className="text-center mb-6"><h1 className="text-2xl font-bold text-sky-600 mb-2">3週間のサイクルが終了しました！</h1><p className="text-slate-600">お疲れ様でした。この3週間を振り返り、次のステップへ進みましょう。</p></div>
@@ -1336,7 +1444,7 @@ const App: React.FC = () => {
                     {view === 'MORNING_CONVERSATION' && (
                         <MorningConversationView 
                             quarterlyGoal={settings.threeWeekGoal || ""}
-                            longTermGoal={settings.longTermGoal}
+                            longTermGoal={settings.quarterlyGoal}
                             onSave={(data, tasks, penalty) => {
                                  const newReflection: Reflection = currentReflection 
                                     ? { ...currentReflection, morning: data, dailyTasks: tasks, pendingScore: penalty ? -penalty : 0 }
@@ -1354,9 +1462,20 @@ const App: React.FC = () => {
                             tasks={currentReflection.dailyTasks || []}
                             sideProjects={settings.sideProjects}
                             onSave={(data, updatedTasks) => {
-                                 let score = 10 + (updatedTasks.filter(t => t.completed).length * 5) + (data.extras.length * 5);
-                                 if (data.wastedTime) score -= 10;
+                                 // Calculate score with penalty for wasted minutes (10 mins = -1 pt)
+                                 const taskScore = updatedTasks.filter(t => t.completed).length * 5;
+                                 const extraScore = data.extras.length * 5;
+                                 const baseScore = 10 + taskScore + extraScore;
+                                 
+                                 const wastedPenalty = data.wastedTimeMinutes 
+                                     ? Math.floor(data.wastedTimeMinutes / 10) 
+                                     : (data.wastedTime ? 10 : 0); // Fallback for legacy string
+
+                                 let score = baseScore - wastedPenalty;
                                  if (currentReflection.pendingScore) score += currentReflection.pendingScore;
+                                 
+                                 // Prevent negative daily score? Maybe allow it. Current logic allows it.
+
                                  const updated: Reflection = { ...currentReflection, night: data, dailyTasks: updatedTasks, score: score, pendingScore: 0 };
                                  const others = reflections.filter(r => r.date !== todayStr);
                                  saveReflections([...others, updated]);

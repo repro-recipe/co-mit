@@ -48,8 +48,8 @@ const cleanJson = (text: string): string => {
 export const generateGoalSuggestions = async (commitmentField: string): Promise<string[]> => {
     const prompt = `
         The user has committed to the field: "${commitmentField}".
-        Generate 3 highly specific, ambitious, and exciting annual goals for this field.
-        Avoid generic goals like "Study hard". Instead, suggest concrete achievements like "Develop and launch a web service with 1000 users" or "Pass the N1 exam with a perfect score".
+        Generate 3 highly specific, ambitious, and exciting 3-MONTH goals for this field.
+        Avoid generic goals like "Study hard". Instead, suggest concrete achievements reachable in 90 days like "Complete a basic web app prototype" or "Read 3 technical books and write summaries".
         
         Return ONLY a JSON object with a "goals" key, which is an array of 3 strings.
         Language: Japanese.
@@ -78,26 +78,22 @@ export const generateGoalSuggestions = async (commitmentField: string): Promise<
     } catch (error) {
         console.error("Error generating goal suggestions:", error);
         return [
-            `${commitmentField}の分野でプロフェッショナルとして認定される`,
-            `${commitmentField}に関連する主要なコンテストや試験で上位に入る`,
-            `${commitmentField}を活用して副収入を得られるレベルになる`,
+            `${commitmentField}の分野で基礎を固め、成果物を作る`,
+            `${commitmentField}に関連する書籍を5冊読破する`,
+            `${commitmentField}を毎日継続する習慣を身につける`,
         ]; // Context-aware fallback
     }
 };
 
 export const generateQuarterlyGoals = async (longTermGoal: string, commitmentField: string): Promise<string[]> => {
+    // Note: This function might be less relevant now that the main goal IS quarterly, but keeping it for sub-breakdowns if needed.
     const prompt = `
         User's Field: "${commitmentField}"
-        User's Annual Goal: "${longTermGoal}"
+        User's 3-Month Goal: "${longTermGoal}"
 
-        Create a strategic 4-step quarterly plan (3 months each) to achieve this annual goal.
-        The steps should be logical milestones.
-        1st Quarter: Foundation / Start
-        2nd Quarter: Development / Practice
-        3rd Quarter: Application / Expansion
-        4th Quarter: Finalization / Achievement
-
-        Return ONLY a JSON object with a "goals" key, which is an array of 4 strings.
+        Create a 3-step monthly plan to achieve this 3-month goal.
+        
+        Return ONLY a JSON object with a "goals" key, which is an array of 3 strings.
         Language: Japanese.
     `;
     try {
@@ -122,16 +118,15 @@ export const generateQuarterlyGoals = async (longTermGoal: string, commitmentFie
         return Array.isArray(result) ? result : (result.goals || []);
     } catch (error) {
         console.error("Error generating quarterly goals:", error);
-        return ["基礎固めと学習", "実践的なスキルの習得", "応用と成果の創出", "目標の最終達成"];
+        return ["1ヶ月目の目標", "2ヶ月目の目標", "3ヶ月目の目標"];
     }
 };
 
 export const visionBoardChat = async (history: ChatMessage[], longTermGoal: string): Promise<string> => {
     const systemInstruction = `
-        You are a Vision Board Coach helping the user visualize their ideal self in exactly *3 weeks*.
-        User's Annual Aspiration: "${longTermGoal}"
+        You are a Vision Board Coach helping the user visualize their ideal self in exactly *3 weeks*, in the context of their larger 3-Month Goal: "${longTermGoal}".
 
-        Your task is to guide the user through a specific visualization sequence.
+        Your task is to guide the user through a specific visualization sequence for the 3-week milestone.
         
         The conversation STARTED with you asking: "What is your dream for 3 weeks from now?"
         
@@ -264,7 +259,7 @@ export const evaluateTask = async (task: string, longTermGoal: string, quarterly
     }
 
     const prompt = `
-        Long-term Goal: "${longTermGoal}"
+        3-Month Goal: "${longTermGoal}"
         Current 3-Week Vision: "${quarterlyGoal}"
         Proposed Daily Task: "${task}"
 
@@ -309,7 +304,7 @@ export const evaluateTask = async (task: string, longTermGoal: string, quarterly
 export const breakDownTaskIntoSteps = async (task: string, longTermGoal: string, quarterlyGoal: string): Promise<string[]> => {
     const prompt = `
         Task: "${task}"
-        Context: Aiming for "${quarterlyGoal}"
+        Context: Aiming for "${quarterlyGoal}" (3-Week) and "${longTermGoal}" (3-Month)
 
         Break this task down into 3-5 actionable, concrete small steps (ToDo list).
         Return ONLY a JSON object with a "steps" key, which is an array of strings.
@@ -438,7 +433,7 @@ export const analyzeFailureReason = async (reason: string, sideProjects?: SidePr
 
 export const evaluateAlphaTask = async (task: string, longTermGoal: string): Promise<{ meaningful: boolean, response: string }> => {
     const prompt = `
-        Long-term Goal: "${longTermGoal}".
+        3-Month Goal: "${longTermGoal}".
         Extra Task: "${task}".
         
         Is this task meaningful for the goal?
@@ -543,7 +538,7 @@ export const generateAITwinResponse = async (twinReflection: Reflection, history
 
 export const generateNextGoal = async (longTermGoal: string, review: string, score: number): Promise<string> => {
     const prompt = `
-        User's Annual Goal: "${longTermGoal}"
+        User's 3-Month Goal: "${longTermGoal}"
         Past 3 Weeks Review: "${review}"
         Score (Activity Level): ${score}
 
@@ -585,7 +580,7 @@ const createImagePromptFromChat = async (history: ChatMessage[], longTermGoal: s
         Based on the user's "3-Week Vision" detailed in the conversation below, create a detailed English image prompt for an AI image generator.
         
         Context: The user wants a "Vision Board" image that represents their ideal self 3 weeks from now.
-        Annual Goal: "${longTermGoal}"
+        3-Month Goal: "${longTermGoal}"
         
         Conversation:
         ${contentText}
