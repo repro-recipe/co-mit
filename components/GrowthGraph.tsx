@@ -86,10 +86,10 @@ const GrowthGraph: React.FC<GrowthGraphProps> = ({ reflections, settings }) => {
 
   if (data.length < 2) {
     return (
-      <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6 flex flex-col items-center justify-center min-h-[200px]">
-        <TrendingUpIcon className="w-12 h-12 text-slate-300 mb-2" />
-        <p className="text-slate-500 font-bold">まだ十分なデータがありません</p>
-        <p className="text-slate-400 text-sm">日々の活動を記録すると、ここに成長グラフが表示されます。</p>
+      <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6 flex flex-col items-center justify-center min-h-[200px] dark:bg-slate-800/70 dark:border-slate-700">
+        <TrendingUpIcon className="w-12 h-12 text-slate-300 dark:text-slate-600 mb-2" />
+        <p className="text-slate-500 dark:text-slate-400 font-bold">まだ十分なデータがありません</p>
+        <p className="text-slate-400 dark:text-slate-500 text-sm">日々の活動を記録すると、ここに成長グラフが表示されます。</p>
       </div>
     );
   }
@@ -129,9 +129,9 @@ const GrowthGraph: React.FC<GrowthGraphProps> = ({ reflections, settings }) => {
   `;
 
   return (
-    <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6">
-      <h2 className="text-xl font-bold text-slate-700 mb-4 flex items-center gap-2">
-         <TrendingUpIcon className="w-6 h-6 text-sky-500" />
+    <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6 dark:bg-slate-800/70 dark:border-slate-700">
+      <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+         <TrendingUpIcon className="w-6 h-6 text-sky-500 dark:text-sky-400" />
          成長の軌跡
       </h2>
       <div className="w-full overflow-x-auto">
@@ -147,7 +147,7 @@ const GrowthGraph: React.FC<GrowthGraphProps> = ({ reflections, settings }) => {
                 {/* Grid Lines (Horizontal) */}
                 {[0, 0.25, 0.5, 0.75, 1].map(t => {
                     const y = padding + t * (height - padding * 2);
-                    return <line key={t} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeDasharray="4" />;
+                    return <line key={t} x1={padding} y1={y} x2={width - padding} y2={y} className="stroke-slate-200 dark:stroke-slate-700" strokeDasharray="4" />;
                 })}
                 
                 {/* Zero Line if visible */}
@@ -157,7 +157,7 @@ const GrowthGraph: React.FC<GrowthGraphProps> = ({ reflections, settings }) => {
                         y1={getY(0)} 
                         x2={width - padding} 
                         y2={getY(0)} 
-                        stroke="#94a3b8" 
+                        className="stroke-slate-400 dark:stroke-slate-500"
                         strokeWidth="1" 
                     />
                 )}
@@ -175,14 +175,14 @@ const GrowthGraph: React.FC<GrowthGraphProps> = ({ reflections, settings }) => {
                     cx={getX(i)} 
                     cy={getY(d.score)} 
                     r="4" 
-                    className="fill-white stroke-sky-500 stroke-2 hover:r-6 transition-all cursor-pointer"
+                    className="fill-white stroke-sky-500 stroke-2 hover:r-6 transition-all cursor-pointer dark:fill-slate-800 dark:stroke-sky-400"
                 >
                     <title>{d.date}: {d.score}pts ({d.rawScore >= 0 ? '+' : ''}{d.rawScore})</title>
                 </circle>
                 ))}
 
                 {/* Labels (Last Point) */}
-                <text x={getX(data.length - 1)} y={getY(data[data.length - 1].score) - 10} textAnchor="middle" className="text-xs font-bold fill-slate-600">
+                <text x={getX(data.length - 1)} y={getY(data[data.length - 1].score) - 10} textAnchor="middle" className="text-xs font-bold fill-slate-600 dark:fill-slate-300">
                     {data[data.length - 1].score}
                 </text>
             </svg>

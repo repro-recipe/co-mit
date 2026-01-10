@@ -54,21 +54,21 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
   const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
 
   return (
-    <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6">
+    <div className="bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-lg p-6 dark:bg-slate-800/70 dark:border-slate-700">
       <div className="flex justify-between items-center mb-4">
-        <button type="button" onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
+        <button type="button" onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition dark:text-slate-200">
           <ChevronLeftIcon className="w-6 h-6" />
         </button>
-        <h3 className="text-xl font-bold text-sky-600">
+        <h3 className="text-xl font-bold text-sky-600 dark:text-sky-400">
           {year}年 {month + 1}月
         </h3>
-        <button type="button" onClick={handleNextMonth} className="p-2 rounded-full hover:bg-slate-200 transition">
+        <button type="button" onClick={handleNextMonth} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition dark:text-slate-200">
           <ChevronRightIcon className="w-6 h-6" />
         </button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {weekDays.map(day => (
-          <div key={day} className="font-bold text-slate-500 text-sm">{day}</div>
+          <div key={day} className="font-bold text-slate-500 dark:text-slate-400 text-sm">{day}</div>
         ))}
         {blanks.map((_, i) => <div key={`blank-${i}`}></div>)}
         {days.map(day => {
@@ -90,17 +90,17 @@ const Calendar: React.FC<CalendarProps> = ({ reflections, onDayClick, currentDat
               disabled={!reflection}
               className={`relative w-full aspect-square flex items-center justify-center rounded-md transition-colors text-sm font-medium disabled:cursor-default
                 ${isToday
-                    ? 'bg-rose-500 text-white'
+                    ? 'bg-rose-500 text-white dark:bg-rose-600'
                     : isCommitted
-                    ? 'bg-sky-100 text-sky-800'
-                    : reflection ? 'bg-white text-slate-700' : 'text-slate-400'
+                    ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'
+                    : reflection ? 'bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-600'
                 }
-                ${reflection && !isToday ? 'cursor-pointer hover:bg-sky-200' : ''}
+                ${reflection && !isToday ? 'cursor-pointer hover:bg-sky-200 dark:hover:bg-slate-600' : ''}
               `}
             >
               {day}
               {reflection && (
-                <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 ${isToday ? 'bg-white' : 'bg-sky-500'} rounded-full`}></span>
+                <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 ${isToday ? 'bg-white' : 'bg-sky-500 dark:bg-sky-400'} rounded-full`}></span>
               )}
             </button>
           );

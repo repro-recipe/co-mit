@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,6 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>co-mit</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
     <style>
       /* Custom scrollbar with a cleaner, light theme */
       ::-webkit-scrollbar {
@@ -13,6 +19,9 @@
       }
       ::-webkit-scrollbar-track {
         background: #f1f5f9; /* slate-100 */
+      }
+      .dark ::-webkit-scrollbar-track {
+        background: #0f172a; /* slate-900 */
       }
       ::-webkit-scrollbar-thumb {
         background: #38bdf8; /* sky-400 */
@@ -35,6 +44,9 @@
         transition: all 0.2s ease-in-out;
         flex-shrink: 0;
       }
+      .dark .task-checkbox {
+        border-color: #64748b; /* slate-500 */
+      }
       .task-checkbox:checked {
         background-color: #0ea5e9; /* sky-500 */
         border-color: #0ea5e9; /* sky-500 */
@@ -56,6 +68,9 @@
         color: #64748b; /* slate-500 */
         transform: translateX(4px);
       }
+      .dark .task-checkbox:checked + .task-label {
+        color: #475569; /* slate-600 */
+      }
     </style>
   <script type="importmap">
 {
@@ -68,7 +83,7 @@
 }
 </script>
 </head>
-  <body class="bg-slate-50 text-slate-800">
+  <body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
