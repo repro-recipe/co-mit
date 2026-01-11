@@ -86,7 +86,7 @@ export const generateGoalSuggestions = async (commitmentField: string): Promise<
 };
 
 export const generateQuarterlyGoals = async (longTermGoal: string, commitmentField: string): Promise<string[]> => {
-    // Note: This function might be less relevant now that the main goal IS quarterly, but keeping it for sub-breakdowns if needed.
+    // Kept for compatibility, but conceptually we are now working with quarterly goals directly.
     const prompt = `
         User's Field: "${commitmentField}"
         User's 3-Month Goal: "${longTermGoal}"
@@ -569,6 +569,42 @@ export const generateNextGoal = async (longTermGoal: string, review: string, sco
     } catch (error) {
         console.error("Error generating next goal:", error);
         return "新しいスキルを習得して実践する";
+    }
+};
+
+// --- Help/Support Chat ---
+export const getHelpResponse = async (history: ChatMessage[]): Promise<string> => {
+    const systemInstruction = `
+        You are the Support AI for "co-mit", a habit-formation and goal-achievement app.
+        The app features: 3-Month Goals, 3-Week Goals, Morning Planning, Night Reflection, AI Twin (past self chat), Spicy Feedback (tough love), and Vision Board creation.
+        
+        Your role: Help the user understand how to use the app.
+        Tone: Helpful, polite, encouraging. Japanese language.
+        
+        Key Explanations:
+        - Morning Planning: Set a main task and break it down.
+        - Night Reflection: Review the day, log wasted time, record extras.
+        - Vision Board: Visualize the goal to boost motivation.
+        - Spicy Feedback: Get tough advice based on scores.
+        
+        If the user asks about something unrelated to the app, politely guide them back to app features.
+    `;
+
+    const contents = history.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.text }],
+    }));
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: contents,
+            config: { systemInstruction },
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error in help chat:", error);
+        return "申し訳ありません。現在AIサポートを利用できません。";
     }
 };
 

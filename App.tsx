@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserSettings, Reflection, DailyTask, AppView, ChatMessage, MorningReflectionData, NightReflectionData, SideProject, Memo, WastedTimeLog } from './types';
 import * as geminiService from './services/geminiService';
-import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon, SettingsIcon, CalendarIcon, ImageIcon, SunIcon, MoonIcon } from './components/Icons';
+import { BrainCircuitIcon, FlameIcon, GhostIcon, BotIcon, SendIcon, ChevronLeftIcon, ChevronRightIcon, PiggyBankIcon, CoMitLogoIcon, FileTextIcon, UsersIcon, MessageSquareIcon, TrendingUpIcon, StarIcon, SettingsIcon, CalendarIcon, ImageIcon, SunIcon, MoonIcon, HelpIcon } from './components/Icons';
 import GrowthGraph from './components/GrowthGraph';
 import RichTextEditor from './components/RichTextEditor';
 import Calendar from './components/Calendar';
@@ -34,17 +34,30 @@ const getDaysDiff = (date1Str: string, date2Str: string): number => {
 
 const migrateSettings = (settings: any): UserSettings => {
     const today = getLocalTodayDate();
+    
+    // Determine deadline for existing users (legacy migration) vs new usage
+    let deadline = settings.quarterlyGoalDeadline;
+    if (!deadline) {
+        if (settings.commitmentStartDate) {
+            // Existing user with history -> Set specific legacy deadline
+            deadline = "2026-03-31"; 
+        } else {
+            // Very new or fresh state -> 90 days from now
+            deadline = addDays(today, 90);
+        }
+    }
+
     return {
         ...settings,
         commitmentStartDate: settings.commitmentStartDate || today,
-        // Migration: longTermGoal -> quarterlyGoal
+        // Map longTermGoal to quarterlyGoal if migrating
         quarterlyGoal: settings.quarterlyGoal || settings.longTermGoal || "",
-        quarterlyGoalDeadline: settings.quarterlyGoalDeadline || addDays(settings.commitmentStartDate || today, 365),
+        quarterlyGoalDeadline: deadline,
         threeWeekGoal: settings.threeWeekGoal || (settings.quarterlyGoals && settings.quarterlyGoals.length > 0 ? settings.quarterlyGoals[0] : ""),
         isPrototyperRegistered: settings.isPrototyperRegistered ?? false,
-        // Default to 2026-01-21 if no deadline exists (Requested by user for legacy data)
         threeWeekGoalDeadline: settings.threeWeekGoalDeadline || "2026-01-21",
-        visionBoardImage: settings.visionBoardImage, // Ensure this is carried over
+        visionBoardImage: settings.visionBoardImage,
+        hasSeenTour: settings.hasSeenTour ?? false, // New users default to false
     };
 };
 
@@ -119,6 +132,64 @@ const Modal: React.FC<{ isOpen: boolean, onClose: () => void, title: string, chi
         </div>
     );
 };
+
+const HelpModal: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, onClose }) => {
+    const [history, setHistory] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState("");
+    const [loading, setLoading] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isOpen && history.length === 0) {
+            setHistory([{ role: 'model', text: "こんにちは！co-mitのAIサポートです。アプリの使い方や機能について、何かお困りですか？" }]);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [history, loading]);
+
+    const handleSend = async () => {
+        if (!input.trim()) return;
+        const newHistory: ChatMessage[] = [...history, { role: 'user', text: input }];
+        setHistory(newHistory);
+        setInput("");
+        setLoading(true);
+        const response = await geminiService.getHelpResponse(newHistory);
+        setHistory([...newHistory, { role: 'model', text: response }]);
+        setLoading(false);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="AIヘルプ">
+            <div className="flex flex-col h-[400px]">
+                <div className="flex-1 overflow-y-auto bg-slate-50 p-4 rounded mb-4 border border-slate-200 dark:bg-slate-900 dark:border-slate-700" ref={scrollRef}>
+                    {history.map((msg, i) => (
+                        <div key={i} className={`flex mb-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'user' ? 'bg-sky-500 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'}`}>
+                                {msg.text}
+                            </div>
+                        </div>
+                    ))}
+                    {loading && <div className="text-xs text-slate-400 animate-pulse">AIが入力中...</div>}
+                </div>
+                <div className="flex gap-2">
+                    <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="質問を入力..." className="flex-1" />
+                    <button onClick={handleSend} disabled={!input || loading} className="p-2 bg-sky-500 text-white rounded hover:bg-sky-600"><SendIcon className="w-5 h-5"/></button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
+const TourTooltip: React.FC = () => (
+    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-800 text-white p-4 rounded-xl shadow-2xl z-50 animate-bounce dark:bg-white dark:text-slate-900">
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-800 rotate-45 dark:bg-white"></div>
+        <p className="font-bold text-sm text-center">まずはここから！<br/>今日の計画を立てましょう。</p>
+    </div>
+);
 
 const LoadingSpinner: React.FC = () => (
     <div className="flex justify-center items-center h-full min-h-[200px]">
@@ -252,7 +323,6 @@ const JournalDetail: React.FC<{ reflection: Reflection }> = ({ reflection }) => 
                              <div className="text-slate-700 bg-indigo-50/50 p-3 rounded dark:text-slate-300 dark:bg-indigo-900/20" dangerouslySetInnerHTML={{ __html: reflection.night.freeMemo }} />
                         </div>
                     )}
-                    {/* Updated Wasted Time Display */}
                     {reflection.night.wastedTimeLogs && reflection.night.wastedTimeLogs.length > 0 && (
                         <div>
                             <p className="text-xs font-bold text-slate-400 mb-1 dark:text-slate-500">無駄にした時間</p>
@@ -294,13 +364,13 @@ const JournalDetail: React.FC<{ reflection: Reflection }> = ({ reflection }) => 
 // --- Sub Views ---
 
 const SettingsView: React.FC<{ settings: UserSettings, onSave: (settings: UserSettings) => void, onBack: () => void }> = ({ settings, onSave, onBack }) => {
-    // Map quarterlyGoal to longTermGoal state for UI consistency
     const [longTermGoal, setLongTermGoal] = useState(settings.quarterlyGoal);
+    const [quarterlyDeadline, setQuarterlyDeadline] = useState(settings.quarterlyGoalDeadline);
     const [threeWeekGoal, setThreeWeekGoal] = useState(settings.threeWeekGoal || "");
     const [threeWeekGoalDeadline, setThreeWeekGoalDeadline] = useState(settings.threeWeekGoalDeadline || "");
 
     const handleSave = () => {
-        onSave({ ...settings, quarterlyGoal: longTermGoal, threeWeekGoal, threeWeekGoalDeadline });
+        onSave({ ...settings, quarterlyGoal: longTermGoal, quarterlyGoalDeadline: quarterlyDeadline, threeWeekGoal, threeWeekGoalDeadline });
     };
 
     return (
@@ -308,15 +378,24 @@ const SettingsView: React.FC<{ settings: UserSettings, onSave: (settings: UserSe
             <Header title="設定・目標編集" onBack={onBack} />
             <div className="space-y-6">
                 <div>
-                    <h3 className="font-bold text-slate-700 mb-2 dark:text-slate-300">1年後の抱負 (長期目標)</h3>
+                    <h3 className="font-bold text-slate-700 mb-2 dark:text-slate-300">3ヶ月の抱負 (四半期目標)</h3>
                     <TextArea 
                         value={longTermGoal} 
                         onChange={(e) => setLongTermGoal(e.target.value)} 
                         rows={3} 
-                        placeholder="1年後の理想の状態..."
+                        placeholder="3ヶ月後の理想の状態..."
+                        className="mb-2"
                     />
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400">期限設定</label>
+                        <Input 
+                            type="date"
+                            value={quarterlyDeadline} 
+                            onChange={(e) => setQuarterlyDeadline(e.target.value)} 
+                        />
+                    </div>
                 </div>
-                <div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                     <h3 className="font-bold text-slate-700 mb-2 dark:text-slate-300">
                         三週間後
                         {threeWeekGoalDeadline ? ` (${threeWeekGoalDeadline.replace(/-/g, '/')}) ` : ' '}
@@ -336,9 +415,6 @@ const SettingsView: React.FC<{ settings: UserSettings, onSave: (settings: UserSe
                                 onChange={(e) => setThreeWeekGoalDeadline(e.target.value)} 
                             />
                         </div>
-                        <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">
-                            ※ 旧バージョンから移行された方は、ここに新しい3週間ゴールと期限を入力してください。
-                        </p>
                     </div>
                 </div>
                 
@@ -386,8 +462,6 @@ const VisionBoardCreationView: React.FC<{
         setChatHistory(newHistory);
         setChatInput("");
         setIsChatLoading(true);
-        // Reuse visionBoardChat service but context is slightly different, 
-        // passing current goal + long term goal as "goal" context is good enough.
         const responseText = await geminiService.visionBoardChat(newHistory, settings.quarterlyGoal);
         setChatHistory([...newHistory, { role: 'model', text: responseText }]);
         setIsChatLoading(false);
@@ -395,7 +469,6 @@ const VisionBoardCreationView: React.FC<{
 
     const handleGenerateVisionBoard = async () => {
         setIsGeneratingImage(true);
-        // Include the explicit goal in the history for context if needed, but the service handles history well.
         const imageUrl = await geminiService.generateVisionBoardImage(chatHistory, settings.quarterlyGoal);
         setVisionImage(imageUrl);
         setIsGeneratingImage(false);
@@ -526,7 +599,7 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
         const today = getLocalTodayDate();
         const settings: UserSettings = {
             quarterlyGoal: longTermGoal, // Mapped to quarterlyGoal
-            quarterlyGoalDeadline: addDays(today, 365),
+            quarterlyGoalDeadline: addDays(today, 90), // New users get 90 days from today
             threeWeekGoal,
             threeWeekGoalDeadline: addDays(today, 21), // Set initial deadline
             yearStartMonth: new Date().getMonth(),
@@ -534,6 +607,7 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
             goalDurationDays: 365,
             depositAmount: 0,
             visionBoardImage: visionImage || undefined,
+            hasSeenTour: false, // Initial value for new users
         };
         onSave(settings);
     };
@@ -542,22 +616,40 @@ const SetupView: React.FC<{ onSave: (settings: UserSettings) => void; setLoading
         switch (step) {
             case 1:
                 return (
-                    <>
-                        <h2 className="text-xl font-semibold mb-2 dark:text-slate-100">Step 1: コミットメント分野</h2>
-                        <p className="text-slate-600 mb-4 dark:text-slate-400">これから1年間、あなたが本気で取り組む分野を一つだけ決めてください。</p>
-                        <Input value={commitmentField} onChange={(e) => setCommitmentField(e.target.value)} placeholder="例：Web開発、英語学習、筋トレ" />
-                        <PrimaryButton onClick={() => setStep(2)} disabled={!commitmentField} className="mt-6 w-full">次へ</PrimaryButton>
-                    </>
+                    <div className="animate-fade-in">
+                        <h2 className="text-2xl font-bold mb-4 text-center text-slate-800 dark:text-slate-100">これからコミットを始めていきましょう！</h2>
+                        <p className="text-slate-600 mb-8 text-center dark:text-slate-400">この後詳細に目標を決めていくので、まずは分野を決めましょう！</p>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+                            {["Web開発", "英語学習", "筋トレ", "研究", "受験勉強"].map(s => (
+                                <button 
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setCommitmentField(s)}
+                                    className={`p-3 rounded-xl border transition-all font-bold text-sm ${commitmentField === s ? 'bg-sky-500 text-white border-sky-500 shadow-md' : 'bg-white border-slate-200 text-slate-600 hover:bg-sky-50 hover:border-sky-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="mb-2">
+                            <label className="text-xs font-bold text-slate-400 mb-1 block dark:text-slate-500">その他の分野</label>
+                            <Input value={commitmentField} onChange={(e) => setCommitmentField(e.target.value)} placeholder="自由に入力してください" />
+                        </div>
+                        
+                        <PrimaryButton onClick={() => setStep(2)} disabled={!commitmentField} className="mt-6 w-full py-3 text-lg">次へ</PrimaryButton>
+                    </div>
                 );
             case 2:
                 return (
                     <>
-                        <h2 className="text-xl font-semibold mb-4 dark:text-slate-100">Step 2: 1年の抱負</h2>
+                        <h2 className="text-xl font-semibold mb-4 dark:text-slate-100">Step 2: 3ヶ月の抱負</h2>
                         <div className="mb-4 p-3 bg-slate-100 rounded-lg dark:bg-slate-700">
                             <span className="text-xs font-bold text-slate-500 block uppercase dark:text-slate-400">選択した分野</span>
                             <p className="text-slate-800 font-semibold dark:text-slate-200">{commitmentField}</p>
                         </div>
-                        <p className="text-slate-600 mb-4 dark:text-slate-400">1年後の厳密なゴールを決める必要はありません。モチベーションの源泉となる「抱負」を言葉にしましょう。</p>
+                        <p className="text-slate-600 mb-4 dark:text-slate-400">まずは3ヶ月の抱負を言葉にしましょう。</p>
                         <TextArea value={longTermGoal} onChange={(e) => setLongTermGoal(e.target.value)} placeholder="例：技術を楽しみながら、周りから頼られるエンジニアになる" rows={3} className="mb-4"/>
                         <div className="flex justify-end mb-6">
                              <SecondaryButton onClick={handleGenerateSuggestions} className="flex items-center gap-2 text-sm">
@@ -708,7 +800,8 @@ const DashboardView: React.FC<{
     currentReflection: Reflection | undefined;
     onNavigate: (view: AppView) => void;
     onUpdateTasks: (tasks: DailyTask[]) => void;
-}> = ({ settings, reflections, totalScore, currentStreak, currentQuarterlyGoal, todayStr, currentReflection, onNavigate, onUpdateTasks }) => {
+    onMarkTourSeen: () => void;
+}> = ({ settings, reflections, totalScore, currentStreak, currentQuarterlyGoal, todayStr, currentReflection, onNavigate, onUpdateTasks, onMarkTourSeen }) => {
     const [isVisionBoardOpen, setIsVisionBoardOpen] = useState(false);
 
     const toggleTaskCompletion = (index: number) => {
@@ -728,17 +821,32 @@ const DashboardView: React.FC<{
     return (
         <div className="space-y-6">
             <header className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="col-span-1 md:col-span-2 relative">
-                    <h2 className="text-sm font-bold text-sky-600 mb-1 dark:text-sky-400">現在の3週間ゴール</h2>
-                    <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currentQuarterlyGoal}</p>
-                    {settings.threeWeekGoalDeadline && (
-                        <div className="flex justify-end mt-2">
-                             <span className="text-sm text-slate-400 font-medium">
-                                ({settings.threeWeekGoalDeadline.replace(/-/g, '/')}まで)
-                            </span>
+                <div className="col-span-1 md:col-span-2 space-y-4">
+                    <Card className="relative border-l-4 border-l-indigo-500">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h2 className="text-sm font-bold text-indigo-600 mb-1 dark:text-indigo-400">現在の3ヶ月の抱負</h2>
+                                <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{settings.quarterlyGoal}</p>
+                            </div>
+                            <div className="text-right">
+                                 <span className="text-xs font-bold text-indigo-400 bg-indigo-50 px-2 py-1 rounded dark:bg-indigo-900/50 dark:text-indigo-300">
+                                    期限: {settings.quarterlyGoalDeadline.replace(/-/g, '/')}
+                                </span>
+                            </div>
                         </div>
-                    )}
-                </Card>
+                    </Card>
+                    <Card className="relative">
+                        <h2 className="text-sm font-bold text-sky-600 mb-1 dark:text-sky-400">現在の3週間ゴール</h2>
+                        <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currentQuarterlyGoal}</p>
+                        {settings.threeWeekGoalDeadline && (
+                            <div className="flex justify-end mt-2">
+                                <span className="text-sm text-slate-400 font-medium">
+                                    ({settings.threeWeekGoalDeadline.replace(/-/g, '/')}まで)
+                                </span>
+                            </div>
+                        )}
+                    </Card>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                     <Card className="text-center">
                         <div className="flex items-center justify-center"><StarIcon className="w-6 h-6 text-amber-400 mr-2"/><h2 className="text-sm font-bold text-slate-500 mb-1 dark:text-slate-400">合計スコア</h2></div>
@@ -757,7 +865,13 @@ const DashboardView: React.FC<{
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold dark:text-slate-100">今日のタスク ({todayStr})</h2>
                             {!currentReflection?.morning ? (
-                                <PrimaryButton onClick={() => onNavigate('MORNING_CONVERSATION')}>朝の計画を立てる</PrimaryButton>
+                                <div className="relative">
+                                    <PrimaryButton onClick={() => {
+                                        onMarkTourSeen();
+                                        onNavigate('MORNING_CONVERSATION');
+                                    }}>朝の計画を立てる</PrimaryButton>
+                                    {!settings.hasSeenTour && <TourTooltip />}
+                                </div>
                             ) : !currentReflection.night ? (
                                 <PrimaryButton onClick={() => onNavigate('NIGHT_REFLECTION')}>夜の振り返りをする</PrimaryButton>
                             ) : (
@@ -811,6 +925,45 @@ const DashboardView: React.FC<{
                 </div>
             </Modal>
         </div>
+    );
+};
+
+const QuarterlyRenewalView: React.FC<{
+    settings: UserSettings;
+    onSave: (newGoal: string, newDeadline: string) => void;
+}> = ({ settings, onSave }) => {
+    const [newGoal, setNewGoal] = useState("");
+    
+    return (
+        <Card className="max-w-2xl mx-auto text-center p-10">
+            <h1 className="text-3xl font-bold text-indigo-600 mb-4 dark:text-indigo-400">3ヶ月の抱負の更新</h1>
+            <p className="text-slate-600 mb-8 dark:text-slate-400">
+                お疲れ様です！前回の抱負「{settings.quarterlyGoal}」の期限が到来しました。<br/>
+                次の3ヶ月に向けた新しい抱負を設定しましょう。
+            </p>
+            
+            <div className="mb-6 text-left">
+                <label className="block text-sm font-bold text-slate-700 mb-2 dark:text-slate-300">新しい3ヶ月の抱負</label>
+                <TextArea 
+                    value={newGoal} 
+                    onChange={(e) => setNewGoal(e.target.value)} 
+                    placeholder="新しい四半期の抱負を入力..."
+                    rows={4}
+                />
+            </div>
+
+            <PrimaryButton 
+                onClick={() => {
+                    // Default to 90 days from now
+                    const nextDeadline = addDays(getLocalTodayDate(), 90);
+                    onSave(newGoal, nextDeadline);
+                }} 
+                disabled={!newGoal}
+                className="w-full py-4 text-lg"
+            >
+                新しい抱負でスタートする
+            </PrimaryButton>
+        </Card>
     );
 };
 
@@ -1357,6 +1510,7 @@ const App: React.FC = () => {
     const [settings, setSettings] = useState<UserSettings | null>(null);
     const [reflections, setReflections] = useState<Reflection[]>([]);
     const [today, setToday] = useState(getLocalTodayDate());
+    const [isHelpOpen, setIsHelpOpen] = useState(false);
     
     // Theme State
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -1374,9 +1528,23 @@ const App: React.FC = () => {
         if (savedSettings) {
             loadedSettings = migrateSettings(JSON.parse(savedSettings));
             setSettings(loadedSettings);
-            if (loadedSettings.commitmentStartDate) {
-                const daysDiff = getDaysDiff(loadedSettings.commitmentStartDate, getLocalTodayDate());
-                if (daysDiff >= 21) setView('GOAL_RENEWAL');
+            
+            const todayDateStr = getLocalTodayDate();
+
+            // Check for Quarterly Renewal First
+            if (loadedSettings.quarterlyGoalDeadline && todayDateStr > loadedSettings.quarterlyGoalDeadline) {
+                setView('QUARTERLY_RENEWAL');
+            } 
+            // Check for 3-Week Renewal
+            else if (loadedSettings.commitmentStartDate) {
+                const daysDiff = getDaysDiff(loadedSettings.commitmentStartDate, todayDateStr);
+                // Simple logic: if 3 weeks passed. Better logic: if today > threeWeekGoalDeadline
+                if (loadedSettings.threeWeekGoalDeadline && todayDateStr > loadedSettings.threeWeekGoalDeadline) {
+                     setView('GOAL_RENEWAL');
+                } else if (daysDiff >= 21) {
+                     // Fallback for old data
+                     setView('GOAL_RENEWAL');
+                }
             }
         }
         if (savedReflections) setReflections(migrateReflections(JSON.parse(savedReflections)));
@@ -1402,6 +1570,7 @@ const App: React.FC = () => {
     const saveReflections = (newReflections: Reflection[]) => { setReflections(newReflections); localStorage.setItem('comit_reflections', JSON.stringify(newReflections)); };
 
     const handleSetupSave = (newSettings: UserSettings) => { saveSettings(newSettings); setView('DEPOSIT'); };
+    
     const handleGoalRenewal = (newGoal: string) => { 
         if (!settings) return; 
         const updated = { 
@@ -1413,8 +1582,26 @@ const App: React.FC = () => {
         saveSettings(updated); 
         setView('DASHBOARD'); 
     };
+
+    const handleQuarterlyRenewal = (newGoal: string, newDeadline: string) => {
+        if (!settings) return;
+        const updated = {
+            ...settings,
+            quarterlyGoal: newGoal,
+            quarterlyGoalDeadline: newDeadline
+        };
+        saveSettings(updated);
+        setView('DASHBOARD');
+    };
+
     const handleUpdateSettings = (newSettings: UserSettings) => saveSettings(newSettings);
     const handleRegisterPrototyper = () => { if (!settings) return; saveSettings({ ...settings, isPrototyperRegistered: true }); };
+    
+    const handleMarkTourSeen = () => {
+        if (!settings) return;
+        const updated = { ...settings, hasSeenTour: true };
+        saveSettings(updated);
+    };
 
     const todayStr = getLocalTodayDate();
     const currentReflection = reflections.find(r => r.date === todayStr);
@@ -1456,6 +1643,20 @@ const App: React.FC = () => {
                     </button>
                  </div>
 
+                 {/* Help Button (FAB) */}
+                 <div className="fixed bottom-6 right-6 z-[100]">
+                    <button
+                        onClick={() => setIsHelpOpen(true)}
+                        className="bg-sky-500 hover:bg-sky-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center"
+                        title="AIヘルプ"
+                    >
+                        <HelpIcon className="w-8 h-8" />
+                    </button>
+                 </div>
+
+                 {/* Help Modal */}
+                 <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
                  <div className="container mx-auto p-4 md:p-8 max-w-6xl">
                     {view === 'DASHBOARD' && (
                         <DashboardView 
@@ -1473,6 +1674,7 @@ const App: React.FC = () => {
                                 const others = reflections.filter(r => r.date !== todayStr);
                                 saveReflections([...others, updated]);
                             }}
+                            onMarkTourSeen={handleMarkTourSeen}
                         />
                     )}
                     {view === 'MORNING_CONVERSATION' && (
@@ -1545,6 +1747,7 @@ const App: React.FC = () => {
                         />
                     )}
                     {view === 'GOAL_RENEWAL' && <GoalRenewalView settings={settings} reflections={reflections} onSave={handleGoalRenewal} setLoading={setLoading} />}
+                    {view === 'QUARTERLY_RENEWAL' && <QuarterlyRenewalView settings={settings} onSave={handleQuarterlyRenewal} />}
                  </div>
             </div>
         );

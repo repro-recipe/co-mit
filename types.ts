@@ -21,6 +21,7 @@ export interface UserSettings {
   lastAITwinSessionDate?: string;
   lastMentoringDate?: string; // For controlling pop-up frequency
   isPrototyperRegistered?: boolean; // Hides prototype modal/banner
+  hasSeenTour?: boolean; // New: Tracks if the user has been guided to the first morning plan
 }
 
 export interface MorningReflectionData {
