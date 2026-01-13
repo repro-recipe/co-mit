@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Reflection, UserSettings } from '../types';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';

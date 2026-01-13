@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { NightReflectionData, ChatMessage, Reflection, DailyTask, SideProject } from '../types';
 
@@ -56,7 +55,7 @@ export const generateGoalSuggestions = async (commitmentField: string): Promise<
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -98,7 +97,7 @@ export const generateQuarterlyGoals = async (longTermGoal: string, commitmentFie
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -157,7 +156,7 @@ export const visionBoardChat = async (history: ChatMessage[], longTermGoal: stri
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: contents,
             config: { systemInstruction },
         });
@@ -188,7 +187,7 @@ export const generateGoalFromChat = async (history: ChatMessage[]): Promise<stri
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -220,7 +219,7 @@ export const compareGoalRecall = async (userInput: string, correctGoal: string):
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -274,7 +273,7 @@ export const evaluateTask = async (task: string, longTermGoal: string, quarterly
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -312,7 +311,7 @@ export const breakDownTaskIntoSteps = async (task: string, longTermGoal: string,
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -350,7 +349,7 @@ export const summarizeNightReflection = async (data: NightReflectionData): Promi
     `;
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: prompt,
       });
       return response.text;
@@ -368,7 +367,7 @@ export const analyzeSentiment = async (text: string): Promise<'positive' | 'nega
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -404,7 +403,7 @@ export const analyzeFailureReason = async (reason: string, sideProjects?: SidePr
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -442,7 +441,7 @@ export const evaluateAlphaTask = async (task: string, longTermGoal: string): Pro
     `;
      try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -472,7 +471,7 @@ export const generateNightSummary = async (tasks: DailyTask[], nightData: NightR
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
         });
         return response.text.trim();
@@ -490,7 +489,7 @@ export const generateSpicyFeedback = async (scoreTrend: number[]): Promise<strin
     `;
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: prompt,
       });
       return response.text;
@@ -523,7 +522,7 @@ export const generateAITwinResponse = async (twinReflection: Reflection, history
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: contents,
         config: {
             systemInstruction: systemInstruction,
@@ -551,7 +550,7 @@ export const generateNextGoal = async (longTermGoal: string, review: string, sco
     `;
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -597,7 +596,7 @@ export const getHelpResponse = async (history: ChatMessage[]): Promise<string> =
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: contents,
             config: { systemInstruction },
         });
@@ -629,7 +628,7 @@ const createImagePromptFromChat = async (history: ChatMessage[], longTermGoal: s
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: prompt,
         });
         return response.text;

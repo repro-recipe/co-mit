@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import type { Reflection, UserSettings } from '../types';
 import { TrendingUpIcon } from './Icons';
